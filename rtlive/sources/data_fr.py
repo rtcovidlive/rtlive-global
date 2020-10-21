@@ -1,3 +1,4 @@
+import datetime
 import io
 import logging
 import requests
@@ -12,10 +13,7 @@ from .. import data, preprocessing
 _log = logging.getLogger(__file__)
 
 
-def get_regions_metadata() -> [
-    Tuple[Dict[str, str], Dict[str, float]]
-
-]:
+def get_regions_metadata() -> [Tuple[Dict[str, str], Dict[str, float]]]:
     """
     Link to regions' population: https://www.insee.fr/fr/statistiques/1893198
     Link to regions' codes: https://www.insee.fr/fr/information/2114819#titre-bloc-29
@@ -126,6 +124,15 @@ def get_data_FR(run_date: pandas.Timestamp) -> pandas.DataFrame:
         total tests for each (day-region) couple.
         "all" region is the sum over all regions.
     """
+    if run_date.date() > datetime.date.today():
+        raise ValueError("Run date is in the future. Nice try.")
+    if run_date.date() < datetime.date.today():
+        # TODO: implement downloading of historic data
+        raise NotImplementedError(
+            "Downloading with a run_date is not yet supported. "
+            f"Today: {datetime.date.today()}, run_date: {run_date}"
+        )
+
     content = requests.get(
         "https://www.data.gouv.fr/fr/datasets/r/001aca18-df6a-45c8-89e6-f82d689e6c01",
         verify=False,
