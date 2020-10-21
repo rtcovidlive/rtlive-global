@@ -12,8 +12,9 @@ from .. import data, preprocessing
 _log = logging.getLogger(__file__)
 
 
-def get_regions_metadata() -> Union[
-    Dict[str, Dict[str, str]], Dict[str, Dict[str, str]]
+def get_regions_metadata() -> [
+    Tuple[Dict[str, str], Dict[str, float]]
+
 ]:
     """
     Link to regions' population: https://www.insee.fr/fr/statistiques/1893198
@@ -21,8 +22,8 @@ def get_regions_metadata() -> Union[
 
     Returns
     -------
-    Dictionary containing two other dictionaries: one mapping regions' codes to regions' names
-    (key="Name"), and another mapping regions' codes to regions' population (key="Population")
+    Tuple of dictionaries: one mapping regions' codes to regions' names, the other mapping regions'
+    codes to regions' population.
     """
     REGIONS_RAW_DATA = {
         "Name": [
@@ -97,7 +98,7 @@ def get_regions_metadata() -> Union[
     reg_pop_codes.loc["all", "Population"] = reg_pop_codes.Population.sum()
     reg_pop_codes.loc["all", "Name"] = "France"
 
-    return reg_pop_codes.to_dict()
+    return reg_pop_codes.to_dict()["Name"], reg_pop_codes.to_dict()["Population"]
 
 
 def get_data_FR(run_date: pandas.Timestamp) -> pandas.DataFrame:
@@ -231,12 +232,12 @@ def forecast_FR(df: pandas.DataFrame) -> Tuple[pandas.DataFrame, dict]:
     return pandas.concat(df_list), results
 
 
-regions_metadata = get_regions_metadata()
+regions_names, regions_population = get_regions_metadata()
 data.set_country_support(
     country_alpha2="FR",
     compute_zone=data.Zone.Europe,
-    region_name=regions_metadata["Name"],
-    region_population=regions_metadata["Population"],
+    region_name=regions_names,
+    region_population=regions_population,
     fn_load=get_data_FR,
     fn_process=forecast_FR,
 )
