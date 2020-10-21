@@ -4,3 +4,4 @@ matplotlib
 mkl-service
 pandas
 pymc3 >=3.9.2
+requests

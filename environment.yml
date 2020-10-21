@@ -14,6 +14,7 @@ dependencies:
   - pip
   - pymc3
   - python-graphviz
+  - requests
   - watermark
   - pip:
     - black_nbconvert
