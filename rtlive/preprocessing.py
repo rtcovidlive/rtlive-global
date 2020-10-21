@@ -72,6 +72,7 @@ def get_holidays(
             )
     return result
 
+
 def predict_testcounts(
     testcounts: pandas.Series,
     *,
@@ -221,3 +222,57 @@ def predict_testcounts(
     )
     # full-length result series, model and forecast are returned
     return result, m, forecast, all_holidays
+
+
+def predict_testcounts_all_regions(
+    df: pandas.DataFrame, country_alpha2: str, **predict_testcounts_kwargs
+) -> typing.Tuple[pandas.Series, typing.Dict[str, ForecastingResult]]:
+    """ Applies test count forecasting to all regions.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        [region, date]-indexed dataframe with a "new_tests" column.
+        May contain a region "all" with the nation-wide sum.
+    country_alpha2: str
+        ISO-3166 alpha-2 short code of the country
+
+    Returns
+    -------
+    df : pandas.Series
+        the date-indexed series of predicted new tests
+    results : dict of ForecastingResult
+        the forecasting results for each region
+    """
+    df = df.copy()
+    results = {}
+    # forecast testcounts in all regions
+    for region in df.index.levels[0]:
+        new_tests_nans = df.xs(region).new_tests.isna()
+        n_train = sum(~new_tests_nans)
+        if sum(~new_tests_nans) > 10:
+            _log.info(
+                "Forecasting testcount gaps for %s from %d training points.",
+                region,
+                n_train,
+            )
+            kwargs = dict(
+                keep_data=True,
+                growth="linear",
+                ignore_before=max(
+                    pandas.Timestamp("2020-03-15"),
+                    df.xs(region)[~new_tests_nans].reset_index().date[0],
+                ),
+            )
+            kwargs.update(predict_testcounts_kwargs)
+            results[region] = predict_testcounts(
+                df.xs(region).new_tests, country=country_alpha2, region=region, **kwargs
+            )
+            result_series = results[region][0]
+            numpy.testing.assert_array_equal(result_series.index, df.loc[region].index)
+            df.loc[region, "predicted_new_tests"] = result_series.values
+        else:
+            _log.warning(
+                "Unable to forecast %s from just %d training points", region, n_train
+            )
+    return df["predicted_new_tests"], results
