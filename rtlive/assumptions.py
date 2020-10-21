@@ -24,7 +24,7 @@ def _download_patient_data(file_path=None):
     """ Downloads patient data to data directory
         from: https://stackoverflow.com/questions/16694907/ """
     if not file_path:
-        file_path = os.path.join(os.path.dirname(__file__), "../data/patients.tar.gz")
+        file_path = pathlib.Path(os.path.join(os.path.dirname(__file__), r"..\data\patients.tar.gz"))
     url = "https://github.com/beoutbreakprepared/nCoV2019/raw/master/latest_data/latestdata.tar.gz"
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
@@ -38,14 +38,18 @@ def _read_patient_data(file_path=None, max_delay=60) -> pandas.DataFrame:
     """ Finds every valid delay between symptom onset and report confirmation
         from the patient line list and returns all the delay samples. """
     if not file_path:
-        file_path = os.path.join(os.path.dirname(__file__), "../data/patients.tar.gz")
-    patients = pandas.read_csv(
-        file_path,
-        parse_dates=False,
-        usecols=["country", "date_onset_symptoms", "date_confirmation"],
-        low_memory=False,
-    )
-
+        file_path = pathlib.Path(os.path.join(os.path.dirname(__file__), r"..\data\patients.tar.gz"))  
+    if not file_path.exists():
+        _download_patient_data()
+    _log.info("Reading patient data")
+    with tarfile.open(file_path, "r:*") as tar:
+        csv_path = tar.getnames()[0]
+        patients = pandas.read_csv(
+            tar.extractfile(csv_path),
+            parse_dates=False,
+            usecols=["country", "date_onset_symptoms", "date_confirmation"],
+            low_memory=False,
+        )
     patients.columns = ["Country", "Onset", "Confirmed"]
     patients.Country = patients.Country.astype("category")
 
