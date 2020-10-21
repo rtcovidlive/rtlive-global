@@ -1,18 +1,19 @@
-import warnings
+import logging
+import numpy
+import pandas
+import typing
 
-warnings.simplefilter(action="ignore", category=FutureWarning)
-
-import pymc3 as pm
-import arviz as az
-import numpy as np
-import pandas as pd
-from scipy import stats as sps
-
+import arviz
+import pymc3
 import theano
 import theano.tensor as tt
-from theano.tensor.signal.conv import conv2d
+import theano.tensor.signal.conv
+import xarray
 
 from . import assumptions
+
+__version__ = '1.0.0'
+_log = logging.getLogger(__file__)
 
 
 def _reindex_observed(observed:pandas.DataFrame, buffer_days:int=10):
@@ -58,34 +59,6 @@ class GenerativeModel:
         self.model = None
         self.observed = _reindex_observed(observed.dropna(subset=['positive', 'total']), buffer_days)
         self.region = region
-
-    @property
-    def n_divergences(self):
-        """ Returns the number of divergences from the current trace """
-        assert self.trace != None, "Must run sample() first!"
-        return self.trace["diverging"].nonzero()[0].size
-
-    @property
-    def inference_data(self):
-        """ Returns an Arviz InferenceData object """
-        assert self.trace, "Must run sample() first!"
-
-        with self.model:
-            posterior_predictive = pm.sample_posterior_predictive(self.trace)
-
-        _inference_data = az.from_pymc3(
-            trace=self.trace,
-            posterior_predictive=posterior_predictive,
-        )
-        _inference_data.posterior.attrs["model_version"] = self.version
-
-        return _inference_data
-
-    @property
-    def trace(self):
-        """ Returns the trace from a sample() call. """
-        assert self._trace, "Must run sample() first!"
-        return self._trace
 
     def _scale_to_positives(self, data):
         """ Scales a time series to have the same mean as the observed positives
@@ -182,28 +155,38 @@ class GenerativeModel:
 
         return self.model
 
-    def sample(
-        self,
-        cores=4,
-        chains=4,
-        tune=700,
-        draws=200,
-        target_accept=0.95,
-        init="jitter+adapt_diag",
-    ):
-        """ Runs the PyMC3 model and stores the trace result in self.trace """
 
-        if self.model is None:
-            self.build()
+def sample(pmodel:pymc3.Model, **kwargs):
+    """ Run sampling with default settings.
 
-        with self.model:
-            self._trace = pm.sample(
-                draws=draws,
-                cores=cores,
-                chains=chains,
-                target_accept=target_accept,
-                tune=tune,
-                init=init,
-            )
+    Parameters
+    ----------
+    pmodel : pymc3.Model
+        the PyMC3 model to sample from
+    **kwargs
+        additional keyword-arguments to pass to pm.sample
+        (overriding the defaults from this implementation)
 
-        return self
+    Returns
+    -------
+    idata : arviz.InferenceData
+        the sampling and posterior predictive result
+    """
+    with pmodel:
+        sample_kwargs = dict(
+            return_inferencedata=False,
+            target_accept=0.95,
+            init='jitter+adapt_diag',
+            cores=4,
+            chains=4,
+            tune=700, draws=200,
+        )
+        sample_kwargs.update(kwargs)
+        trace = pymc3.sample(**sample_kwargs)
+
+        idata = arviz.from_pymc3(
+            trace=trace,
+            posterior_predictive=pymc3.sample_posterior_predictive(trace),
+        )
+        idata.posterior.attrs["model_version"] = __version__
+    return idata
