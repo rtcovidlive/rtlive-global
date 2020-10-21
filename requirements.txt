@@ -1,13 +1,6 @@
-pymc3 >=3.9.2
-arviz >=0.9.0
-pandas
-jupyterlab
-numpy
-scipy
-mkl
-conda-build
+iso3166
+fbprophet
+matplotlib
 mkl-service
-boto3
-paramiko
-s3fs
-seaborn
+pandas
+pymc3 >=3.9.2
