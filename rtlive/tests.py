@@ -20,6 +20,7 @@ class TestData:
             )
             df["region"] = "all"
             df["new_tests"] = 100 + numpy.arange(len(df)) * numpy.random.randint(10, 100, size=len(df))
+            numpy.random.seed(123)
             df["new_cases"] = numpy.random.randint(df["new_tests"]/200, df["new_tests"]/100)
             df.at["2020-07-01":"2020-07-15", "new_tests"] = numpy.nan
             return df.reset_index().set_index(["region", "date"])
@@ -38,7 +39,7 @@ class TestData:
             return df, results
 
         data.set_country_support(
-            country_alpha2="CH",
+            country_alpha2="DE",
             compute_zone=data.Zone.Europe,
             region_name={
                 "all": "Test country",
@@ -49,9 +50,9 @@ class TestData:
             fn_load=test_load,
             fn_process=test_process,
         )
-        assert "CH" in data.SUPPORTED_COUNTRIES
-        df = data.get_data("CH", datetime.datetime.today())
-        df, forecasts = data.process_testcounts("CH", df)
+        assert "DE" in data.SUPPORTED_COUNTRIES
+        df = data.get_data("DE", datetime.datetime.today())
+        df, forecasts = data.process_testcounts("DE", df)
         assert isinstance(df, pandas.DataFrame)
         assert isinstance(forecasts, dict)
 
