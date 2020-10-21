@@ -1,6 +1,8 @@
 import datetime
 import numpy
+import os
 import pandas
+import pathlib
 import pytest
 
 import arviz
@@ -143,3 +145,14 @@ class TestModel:
         expected_vars = set(["exposure", "tests", "observed_positive", "nonzero_observed_positive"])
         missing_vars = expected_vars.difference(set(idata.constant_data.keys()))
         assert not missing_vars, f'Missing {missing_vars} from constant_data group'
+
+class TestSources:
+    @pytest.mark.parametrize("fp_submodule", pathlib.Path(os.path.join(os.path.dirname(__file__), "sources")).glob("*.py"))
+    def test_imports(self, fp_submodule):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            f'rtlive.sources.{fp_submodule.stem}',
+            str(fp_submodule)
+        )
+        imported_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(imported_module)
