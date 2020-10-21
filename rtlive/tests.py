@@ -1,3 +1,4 @@
+import datetime
 import numpy
 import pandas
 import pytest
@@ -5,26 +6,71 @@ import pytest
 import arviz
 import pymc3
 
-import covid.data
-import covid.models.generative
+from . import assumptions
+from . import data
+from . import model
 
 
-class TestDataUS:
-    def test_get_raw(self):
-        df_raw = covid.data.get_raw_covidtracking_data()
-        assert isinstance(df_raw, pandas.DataFrame)
+class TestData:
+    def test_mock_country(self):
+        def test_load(run_date):
+            df = pandas.DataFrame(
+                index=pandas.date_range("2020-03-01", "2020-10-01", freq="D", name="date"),
+                columns=["region", "new_cases", "new_tests"]
+            )
+            df["region"] = "all"
+            df["new_tests"] = 100 + numpy.arange(len(df)) * numpy.random.randint(10, 100, size=len(df))
+            df["new_cases"] = numpy.random.randint(df["new_tests"]/200, df["new_tests"]/100)
+            df.at["2020-07-01":"2020-07-15", "new_tests"] = numpy.nan
+            return df.reset_index().set_index(["region", "date"])
 
-    def test_process(self):
-        df_raw = covid.data.get_raw_covidtracking_data()
-        run_date = pandas.Timestamp('2020-06-25')
-        df_processed = covid.data.process_covidtracking_data(df_raw, run_date)
-        assert isinstance(df_processed, pandas.DataFrame)
-        assert df_processed.index.names == ("region", "date")
-        # the last entry in the data is the day before `run_date`!
-        assert df_processed.xs('NY').index[-1] < run_date
-        assert df_processed.xs('NY').index[-1] == (run_date - pandas.DateOffset(1))
-        assert "positive" in df_processed.columns
-        assert "total" in df_processed.columns
+        def test_process(df):
+            results = {}
+            for region in df.reset_index().region.unique():
+                interpolation = df.xs(region).new_tests.interpolate("linear")
+                df.loc[pandas.IndexSlice[region, :], "predicted_new_tests"] = interpolation.values
+                results[region] = (
+                    interpolation,
+                    None, # Prophet object
+                    None, # Prophet result dataframe
+                    None, # named holidays
+                )
+            return df, results
+
+        data.set_country_support(
+            country_alpha2="CH",
+            compute_zone=data.Zone.Europe,
+            region_name={
+                "all": "Test country",
+            },
+            region_population={
+                "all": 1_234_567,
+            },
+            fn_load=test_load,
+            fn_process=test_process,
+        )
+        assert "CH" in data.SUPPORTED_COUNTRIES
+        df = data.get_data("CH", datetime.datetime.today())
+        df, forecasts = data.process_testcounts("CH", df)
+        assert isinstance(df, pandas.DataFrame)
+        assert isinstance(forecasts, dict)
+
+    def test_unsupported_country(self):
+        with pytest.raises(KeyError, match="not in the collection"):
+            data.get_data("XY", datetime.datetime.today())
+        with pytest.raises(KeyError, match="Unknown ISO-3166 alpha 2"):
+            data.set_country_support(
+                country_alpha2="XY",
+                compute_zone=data.Zone.Europe,
+                region_name={
+                    "all": "Test country",
+                },
+                region_population={
+                    "all": 1_234_567,
+                },
+                fn_load=None,
+                fn_process=None,
+            )
 
 
 class TestDataGeneralized:
