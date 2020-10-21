@@ -71,3 +71,153 @@ def get_holidays(
                 f'Region "{region}" not found in {country} states or provinces.'
             )
     return result
+
+def predict_testcounts(
+    testcounts: pandas.Series,
+    *,
+    country: str,
+    region: typing.Optional[typing.Union[str, typing.List[str]]],
+    regional_holidays: bool = False,
+    keep_data: bool,
+    ignore_before: typing.Optional[
+        typing.Union[datetime.datetime, pandas.Timestamp, str]
+    ] = None,
+    **kwargs,
+) -> ForecastingResult:
+    """ Predict/smooth missing test counts with Prophet.
+
+    Implemented by Laura Helleckes and Michael Osthege.
+
+    Parameters
+    ----------
+    testcounts : pandas.Series
+        date-indexed series of observed testcounts
+    country : str
+        name or short code of country (as used by https://github.com/dr-prodigy/python-holidays)
+    region : optional, [str]
+        if None or []: only nation-wide
+        if "all": nation-wide and all regions
+        if "CA": nation-wide and those for region "CA"
+        if ["CA", "NY", "FL"]: nation-wide and those for all listed regions
+    regional_holidays: bool, default False
+        if True, fetch regional holidays for each region, if `region` is not set to None or to only
+        one region.
+        if False (default), fetch only national holidays (useful for countries where test data is
+        available at the regional-level, but which only have national holidays).
+    keep_data : bool
+        if True, existing entries are kept
+        if False, existing entries are also predicted, resulting in a smoothed profile
+    ignore_before : timestamp
+        all dates before this are ignored
+        Use this argument to prevent an unrealistic upwards trend due to initial testing ramp-up
+    **kwargs
+        optional kwargs for the `fbprophet.Prophet`. For example:
+        * growth: 'linear' or 'logistic' (default)
+        * seasonality_mode: 'additive' or 'multiplicative' (default)
+
+    Returns
+    -------
+    result : pandas.Series
+        the date-indexed series of smoothed/predicted testcounts
+    m : fbprophet.Prophet
+        the phophet model
+    forecast : pandas.DataFrame
+        contains the model prediction
+    holidays : dict of { datetime : str }
+        dictionary of the holidays that were used in the model
+    """
+    testcounts.index.name = "date"
+    testcounts.name = "total"
+    if not ignore_before:
+        ignore_before = testcounts.index[0]
+
+    mask_fit = testcounts.index >= ignore_before
+    if keep_data:
+        mask_predict = numpy.logical_and(
+            testcounts.index >= ignore_before, numpy.isnan(testcounts.values)
+        )
+    else:
+        mask_predict = testcounts.index >= ignore_before
+
+    years = set([testcounts.index[0].year, testcounts.index[-1].year])
+    regions = numpy.atleast_1d(region)
+
+    if region != "all" and len(regions) <= 1 and regional_holidays:
+        raise ValueError(
+            "Predicting test counts only at national level or for one region only. "
+            "Can't ask for regional holiday. Set `regional_holidays` kwarg to False."
+        )
+    # need last condition because some countries only national holidays for all regions:
+    if (region == "all" or len(regions) > 1) and regional_holidays:
+        # distinguish between national and regional holidays
+        all_holidays = get_holidays(country, region, years=years)
+        national_holidays = get_holidays(country, region=None, years=years)
+
+        holiday_df = pandas.DataFrame(
+            data=[
+                (
+                    date,
+                    name,
+                    "national" if date in national_holidays.keys() else "regional",
+                )
+                for date, name in all_holidays.items()
+            ],
+            columns=["ds", "name", "holiday"],
+        )
+    else:
+        # none, or only one region -> no distinction between national/regional holidays
+        all_holidays = get_holidays(country, region=None, years=years)
+        holiday_df = pandas.DataFrame(
+            dict(
+                holiday="holiday",
+                name=list(all_holidays.values()),
+                ds=pandas.to_datetime(list(all_holidays.keys())),
+            )
+        )
+
+    # Config settings of forecast model
+    days = (testcounts.index[-1] - testcounts.index[0]).days
+    prophet_kwargs = dict(
+        growth="logistic",
+        seasonality_mode="multiplicative",
+        daily_seasonality=False,
+        weekly_seasonality=True,
+        yearly_seasonality=False,
+        holidays=holiday_df,
+        mcmc_samples=500,
+        # restrict number of potential changepoints:
+        n_changepoints=int(numpy.ceil(days / 30)),
+    )
+    # override defaults with user-specified kwargs
+    prophet_kwargs.update(kwargs)
+    m = fbprophet.Prophet(**prophet_kwargs)
+
+    # fit only the selected subset of the data
+    df_fit = (
+        testcounts.loc[mask_fit]
+        .reset_index()
+        .rename(columns={"date": "ds", "total": "y"})
+    )
+
+    if prophet_kwargs["growth"] == "logistic":
+        cap = numpy.max(testcounts) * 1
+        df_fit["floor"] = 0
+        df_fit["cap"] = cap
+    m.fit(df_fit)
+
+    # predict for all dates in the input
+    df_predict = testcounts.reset_index().rename(columns={"date": "ds"})
+    if prophet_kwargs["growth"] == "logistic":
+        df_predict["floor"] = 0
+        df_predict["cap"] = cap
+    forecast = m.predict(df_predict)
+
+    # make a series of the result that has the same index as the input
+    result = pandas.Series(
+        index=testcounts.index, data=testcounts.copy().values, name="testcount"
+    )
+    result.loc[mask_predict] = numpy.clip(
+        forecast.set_index("ds").yhat, 0, forecast.yhat.max()
+    )
+    # full-length result series, model and forecast are returned
+    return result, m, forecast, all_holidays
