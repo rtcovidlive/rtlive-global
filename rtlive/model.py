@@ -12,7 +12,23 @@ import theano
 import theano.tensor as tt
 from theano.tensor.signal.conv import conv2d
 
-from covid.patients import get_delay_distribution
+from . import assumptions
+
+
+def _to_convolution_ready_gt(gt, len_observed):
+    """ Speeds up theano.scan by pre-computing the generation time interval
+        vector. Thank you to Junpeng Lao for this optimization.
+        Please see the outbreak simulation math here:
+        https://staff.math.su.se/hoehle/blog/2020/04/15/effectiveR0.html """
+    convolution_ready_gt = np.zeros((len_observed - 1, len_observed))
+    for t in range(1, len_observed):
+        begin = np.maximum(0, t - len(gt) + 1)
+        slice_update = gt[1 : t - begin + 1][::-1]
+        convolution_ready_gt[
+            t - 1, begin : begin + len(slice_update)
+        ] = slice_update
+    convolution_ready_gt = theano.shared(convolution_ready_gt)
+    return convolution_ready_gt
 
 
 class GenerativeModel:
@@ -76,29 +92,13 @@ class GenerativeModel:
         scale_factor = self.observed.positive.mean() / np.mean(data)
         return scale_factor * data
 
-    def _get_convolution_ready_gt(self, len_observed):
-        """ Speeds up theano.scan by pre-computing the generation time interval
-            vector. Thank you to Junpeng Lao for this optimization.
-            Please see the outbreak simulation math here:
-            https://staff.math.su.se/hoehle/blog/2020/04/15/effectiveR0.html """
-        gt = self._get_generation_time_interval()
-        convolution_ready_gt = np.zeros((len_observed - 1, len_observed))
-        for t in range(1, len_observed):
-            begin = np.maximum(0, t - len(gt) + 1)
-            slice_update = gt[1 : t - begin + 1][::-1]
-            convolution_ready_gt[
-                t - 1, begin : begin + len(slice_update)
-            ] = slice_update
-        convolution_ready_gt = theano.shared(convolution_ready_gt)
-        return convolution_ready_gt
-
     def build(self):
         """ Builds and returns the Generative model. Also sets self.model """
 
-        p_delay = get_delay_distribution()
+        p_delay = assumptions.delay_distribution()
         nonzero_days = self.observed.total.gt(0)
         len_observed = len(self.observed)
-        convolution_ready_gt = self._get_convolution_ready_gt(len_observed)
+        convolution_ready_gt = _to_convolution_ready_gt(assumptions.generation_time(), len_observed)
         x = np.arange(len_observed)[:, None]
 
         coords = {
