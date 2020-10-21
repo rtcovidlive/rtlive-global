@@ -12,7 +12,7 @@ import xarray
 
 from . import assumptions
 
-__version__ = '1.0.0'
+__version__ = '1.0.2'
 _log = logging.getLogger(__file__)
 
 
@@ -45,105 +45,122 @@ def _to_convolution_ready_gt(gt, len_observed):
     return convolution_ready_gt
 
 
-class GenerativeModel:
-    def __init__(self, region: str, observed: pd.DataFrame, buffer_days=10):
-        """ Takes a region (ie State) name and observed new positive and
-            total test counts per day. buffer_days is the default number of
-            blank days we pad on the leading edge of the time series because
-            infections occur long before reports and we need to infer values
-            on those days """
-        self._trace = None
-        self._inference_data = None
-        self.model = None
-        self.observed = _reindex_observed(observed.dropna(subset=['positive', 'total']), buffer_days)
-        self.region = region
+def build_model(
+    observed:pandas.DataFrame,
+    p_generation_time:numpy.ndarray,
+    p_delay:numpy.ndarray,
+    buffer_days:int=10,
+    pmodel:typing.Optional[pymc3.Model]=None,
+) -> pymc3.Model:
+    """ Builds the Rt.live PyMC3 model.
 
-    def build(self):
-        """ Builds and returns the Generative model. Also sets self.model """
+    Model by Kevin Systrom, Thomas Vladek and Rtlive contributors.
 
-        p_delay = assumptions.delay_distribution()
-        nonzero_days = self.observed.total.gt(0)
-        len_observed = len(self.observed)
-        convolution_ready_gt = _to_convolution_ready_gt(assumptions.generation_time(), len_observed)
-        x = np.arange(len_observed)[:, None]
+    Parameters
+    ----------
+    observed : pandas.DataFrame
+        date-indexed dataframe with "positive" (daily positives) and "total" (daily tests) columns
+    p_generation_time : numpy.ndarray
+        numpy array that describes the generation time distribution
+    p_delay : numpy.ndarray
+        numpy array that describes the testing delay distribution
+    buffer_days : int
+        number of days to prepend before the beginning of the data
+    pmodel : optional, PyMC3 model
+        an existing PyMC3 model object to use (not context-activated)
 
-        coords = {
-            "date": self.observed.index.values,
-            "nonzero_date": self.observed.index.values[self.observed.total.gt(0)],
-        }
-        with pm.Model(coords=coords) as self.model:
+    Returns
+    -------
+    pmodel : pymc3.Model
+        the (created) PyMC3 model
+    """
+    observed = _reindex_observed(observed.dropna(subset=['positive', 'total']), buffer_days)
 
-            # Let log_r_t walk randomly with a fixed prior of ~0.035. Think
-            # of this number as how quickly r_t can react.
-            log_r_t = pm.GaussianRandomWalk(
-                "log_r_t",
-                sigma=0.035,
-                dims=["date"]
-            )
-            r_t = pm.Deterministic("r_t", pm.math.exp(log_r_t), dims=["date"])
+    len_observed = len(observed)
+    # precompute generation time interval vector to speed up tt.scan
+    convolution_ready_gt = _to_convolution_ready_gt(p_generation_time, len_observed)
 
-            # For a given seed population and R_t curve, we calculate the
-            # implied infection curve by simulating an outbreak. While this may
-            # look daunting, it's simply a way to recreate the outbreak
-            # simulation math inside the model:
-            # https://staff.math.su.se/hoehle/blog/2020/04/15/effectiveR0.html
-            seed = pm.Exponential("seed", 1 / 0.02)
-            y0 = tt.zeros(len_observed)
-            y0 = tt.set_subtensor(y0[0], seed)
-            outputs, _ = theano.scan(
-                fn=lambda t, gt, y, r_t: tt.set_subtensor(y[t], tt.sum(r_t * y * gt)),
-                sequences=[tt.arange(1, len_observed), convolution_ready_gt],
-                outputs_info=y0,
-                non_sequences=r_t,
-                n_steps=len_observed - 1,
-            )
-            infections = pm.Deterministic("infections", outputs[-1], dims=["date"])
+    nonzero_days = observed.total.gt(0)
+    coords = {
+        "date": observed.index.values,
+        "nonzero_date": observed.index.values[nonzero_days],
+    }
+    if not pmodel:
+        pmodel = pymc3.Model(coords=coords)
 
-            # Convolve infections to confirmed positive reports based on a known
-            # p_delay distribution. See patients.py for details on how we calculate
-            # this distribution.
-            test_adjusted_positive = pm.Deterministic(
-                "test_adjusted_positive",
-                conv2d(
-                    tt.reshape(infections, (1, len_observed)),
-                    tt.reshape(p_delay, (1, len(p_delay))),
-                    border_mode="full",
-                )[0, :len_observed],
-                dims=["date"]
-            )
+    with pmodel:
+        # Let log_r_t walk randomly with a fixed prior of ~0.035. Think
+        # of this number as how quickly r_t can react.
+        log_r_t = pymc3.GaussianRandomWalk(
+            "log_r_t",
+            sigma=0.035,
+            dims=["date"]
+        )
+        r_t = pymc3.Deterministic("r_t", pymc3.math.exp(log_r_t), dims=["date"])
 
-            # Picking an exposure with a prior that exposure never goes below
-            # 0.1 * max_tests. The 0.1 only affects early values of Rt when
-            # testing was minimal or when data errors cause underreporting
-            # of tests.
-            tests = pm.Data("tests", self.observed.total.values, dims=["date"])
-            exposure = pm.Deterministic(
-                "exposure",
-                pm.math.clip(tests, self.observed.total.max() * 0.1, 1e9),
-                dims=["date"]
-            )
+        t_generation_time = pymc3.Data("p_generation_time", p_generation_time)
+        # For a given seed population and R_t curve, we calculate the
+        # implied infection curve by simulating an outbreak. While this may
+        # look daunting, it's simply a way to recreate the outbreak
+        # simulation math inside the model:
+        # https://staff.math.su.se/hoehle/blog/2020/04/15/effectiveR0.html
+        seed = pymc3.Exponential("seed", 1 / 0.02)
+        y0 = tt.zeros(len_observed)
+        y0 = tt.set_subtensor(y0[0], seed)
+        outputs, _ = theano.scan(
+            fn=lambda t, gt, y, r_t: tt.set_subtensor(y[t], tt.sum(r_t * y * gt)),
+            sequences=[tt.arange(1, len_observed), convolution_ready_gt],
+            outputs_info=y0,
+            non_sequences=r_t,
+            n_steps=len_observed - 1,
+        )
+        infections = pymc3.Deterministic("infections", outputs[-1], dims=["date"])
 
-            # Test-volume adjust reported cases based on an assumed exposure
-            # Note: this is similar to the exposure parameter in a Poisson
-            # regression.
-            positive = pm.Deterministic(
-                "positive", exposure * test_adjusted_positive,
-                dims=["date"]
-            )
+        t_p_delay = pymc3.Data("p_delay", p_delay)
+        # Convolve infections to confirmed positive reports based on a known
+        # p_delay distribution. See patients.py for details on how we calculate
+        # this distribution.
+        test_adjusted_positive = pymc3.Deterministic(
+            "test_adjusted_positive",
+            theano.tensor.signal.conv.conv2d(
+                tt.reshape(infections, (1, len_observed)),
+                tt.reshape(t_p_delay, (1, len(p_delay))),
+                border_mode="full",
+            )[0, :len_observed],
+            dims=["date"]
+        )
 
-            # Save data as part of trace so we can access in inference_data
-            observed_positive = pm.Data("observed_positive", self.observed.positive.values, dims=["date"])
-            nonzero_observed_positive = pm.Data("nonzero_observed_positive", self.observed.positive[nonzero_days.values].values, dims=["nonzero_date"])
+        # Picking an exposure with a prior that exposure never goes below
+        # 0.1 * max_tests. The 0.1 only affects early values of Rt when
+        # testing was minimal or when data errors cause underreporting
+        # of tests.
+        tests = pymc3.Data("tests", observed.total.values, dims=["date"])
+        exposure = pymc3.Deterministic(
+            "exposure",
+            pymc3.math.clip(tests, observed.total.max() * 0.1, 1e9),
+            dims=["date"]
+        )
 
-            positive_nonzero = pm.NegativeBinomial(
-                "nonzero_positive",
-                mu=positive[nonzero_days.values],
-                alpha=pm.Gamma("alpha", mu=6, sigma=1),
-                observed=nonzero_observed_positive,
-                dims=["nonzero_date"]
-            )
+        # Test-volume adjust reported cases based on an assumed exposure
+        # Note: this is similar to the exposure parameter in a Poisson
+        # regression.
+        positive = pymc3.Deterministic(
+            "positive", exposure * test_adjusted_positive,
+            dims=["date"]
+        )
 
-        return self.model
+        # Save data as part of trace so we can access in inference_data
+        observed_positive = pymc3.Data("observed_positive", observed.positive.values, dims=["date"])
+        nonzero_observed_positive = pymc3.Data("nonzero_observed_positive", observed.positive[nonzero_days.values].values, dims=["nonzero_date"])
+
+        positive_nonzero = pymc3.NegativeBinomial(
+            "nonzero_positive",
+            mu=positive[nonzero_days.values],
+            alpha=pymc3.Gamma("alpha", mu=6, sigma=1),
+            observed=nonzero_observed_positive,
+            dims=["nonzero_date"]
+        )
+    return pmodel
 
 
 def sample(pmodel:pymc3.Model, **kwargs):
