@@ -76,23 +76,6 @@ class GenerativeModel:
         scale_factor = self.observed.positive.mean() / np.mean(data)
         return scale_factor * data
 
-    def _get_generation_time_interval(self):
-        """ Create a discrete P(Generation Interval)
-            Source: https://www.ijidonline.com/article/S1201-9712(20)30119-3/pdf """
-        mean_si = 4.7
-        std_si = 2.9
-        mu_si = np.log(mean_si ** 2 / np.sqrt(std_si ** 2 + mean_si ** 2))
-        sigma_si = np.sqrt(np.log(std_si ** 2 / mean_si ** 2 + 1))
-        dist = sps.lognorm(scale=np.exp(mu_si), s=sigma_si)
-
-        # Discretize the Generation Interval up to 20 days max
-        g_range = np.arange(0, 20)
-        gt = pd.Series(dist.cdf(g_range), index=g_range)
-        gt = gt.diff().fillna(0)
-        gt /= gt.sum()
-        gt = gt.values
-        return gt
-
     def _get_convolution_ready_gt(self, len_observed):
         """ Speeds up theano.scan by pre-computing the generation time interval
             vector. Thank you to Junpeng Lao for this optimization.

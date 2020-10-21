@@ -16,6 +16,7 @@ if not _DP_DATA.exists():
 
 __all__ = [
     "delay_distribution",
+    "generation_time",
 ]
 
 
@@ -113,3 +114,21 @@ def delay_distribution(incubation_days=5) -> numpy.ndarray:
         p_delay.to_csv(pathlib.Path(_DP_DATA, "p_delay.csv"), index=False)
 
     return p_delay.values
+
+
+def generation_time() -> numpy.ndarray:
+    """ Create a discrete P(Generation Interval)
+        Source: https://www.ijidonline.com/article/S1201-9712(20)30119-3/pdf """
+    mean_si = 4.7
+    std_si = 2.9
+    mu_si = numpy.log(mean_si ** 2 / numpy.sqrt(std_si ** 2 + mean_si ** 2))
+    sigma_si = numpy.sqrt(numpy.log(std_si ** 2 / mean_si ** 2 + 1))
+    dist = scipy.stats.lognorm(scale=numpy.exp(mu_si), s=sigma_si)
+
+    # Discretize the Generation Interval up to 20 days max
+    g_range = numpy.arange(0, 20)
+    gt = pandas.Series(dist.cdf(g_range), index=g_range)
+    gt = gt.diff().fillna(0)
+    gt /= gt.sum()
+    gt = gt.values
+    return gt
