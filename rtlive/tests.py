@@ -19,7 +19,7 @@ class TestData:
                 columns=["region", "new_cases", "new_tests"]
             )
             df["region"] = "all"
-            df["new_tests"] = 100 + numpy.arange(len(df)) * numpy.random.randint(10, 100, size=len(df))
+            df["new_tests"] = 500 + numpy.arange(len(df)) * numpy.random.randint(10, 100, size=len(df))
             numpy.random.seed(123)
             df["new_cases"] = numpy.random.randint(df["new_tests"]/200, df["new_tests"]/100)
             df.at["2020-07-01":"2020-07-15", "new_tests"] = numpy.nan
@@ -76,6 +76,8 @@ class TestData:
 
 class TestModel:
     def test_build(self):
+        from rtlive.sources import data_ch
+
         country_alpha2 = 'CH'
         df_raw = data.get_data(
             country_alpha2, datetime.datetime.today()
@@ -101,6 +103,8 @@ class TestModel:
         assert not missing_vars, f'Missing variables: {missing_vars}'
 
     def test_sample_and_idata(self):
+        from rtlive.sources import data_ch
+
         country_alpha2 = 'CH'
         df_raw = data.get_data(
             country_alpha2, datetime.datetime.today()
