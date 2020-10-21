@@ -39,7 +39,7 @@ def _read_patient_data(file_path=None, max_delay=60) -> pandas.DataFrame:
         from the patient line list and returns all the delay samples. """
     if not file_path:
         file_path = os.path.join(os.path.dirname(__file__), "../data/patients.tar.gz")
-    patients = pd.read_csv(
+    patients = pandas.read_csv(
         file_path,
         parse_dates=False,
         usecols=["country", "date_onset_symptoms", "date_confirmation"],
@@ -62,10 +62,10 @@ def _read_patient_data(file_path=None, max_delay=60) -> pandas.DataFrame:
     patients = patients[is_ten_char(patients.Confirmed) & is_ten_char(patients.Onset)]
 
     # Convert both to datetimes
-    patients.Confirmed = pd.to_datetime(
+    patients.Confirmed = pandas.to_datetime(
         patients.Confirmed, format="%d.%m.%Y", errors="coerce"
     )
-    patients.Onset = pd.to_datetime(patients.Onset, format="%d.%m.%Y", errors="coerce")
+    patients.Onset = pandas.to_datetime(patients.Onset, format="%d.%m.%Y", errors="coerce")
 
     # Only keep records where confirmed > onset
     patients = patients[patients.Confirmed > patients.Onset]
@@ -76,7 +76,7 @@ def _read_patient_data(file_path=None, max_delay=60) -> pandas.DataFrame:
 
     # Remove any onset dates from the last two weeks to account for all the
     # people who haven't been confirmed yet.
-    patients = patients[patients.Onset < patients.Onset.max() - pd.Timedelta(days=14)]
+    patients = patients[patients.Onset < patients.Onset.max() - pandas.Timedelta(days=14)]
 
     return patients
 
