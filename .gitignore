@@ -170,3 +170,4 @@ dmypy.json
 ################ CUSTOM ################
 *.vscode
 data/*
+Sandbox*.ipynb
