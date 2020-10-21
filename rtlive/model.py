@@ -10,7 +10,6 @@ import theano.tensor as tt
 import theano.tensor.signal.conv
 import xarray
 
-from . import assumptions
 
 __version__ = '1.0.2'
 _log = logging.getLogger(__file__)
@@ -29,15 +28,15 @@ def _reindex_observed(observed:pandas.DataFrame, buffer_days:int=10):
     return observed
 
 
-def _to_convolution_ready_gt(gt, len_observed):
+def _to_convolution_ready_gt(generation_time, len_observed):
     """ Speeds up theano.scan by pre-computing the generation time interval
         vector. Thank you to Junpeng Lao for this optimization.
         Please see the outbreak simulation math here:
         https://staff.math.su.se/hoehle/blog/2020/04/15/effectiveR0.html """
-    convolution_ready_gt = np.zeros((len_observed - 1, len_observed))
+    convolution_ready_gt = numpy.zeros((len_observed - 1, len_observed))
     for t in range(1, len_observed):
-        begin = np.maximum(0, t - len(gt) + 1)
-        slice_update = gt[1 : t - begin + 1][::-1]
+        begin = numpy.maximum(0, t - len(generation_time) + 1)
+        slice_update = generation_time[1 : t - begin + 1][::-1]
         convolution_ready_gt[
             t - 1, begin : begin + len(slice_update)
         ] = slice_update
