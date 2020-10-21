@@ -18,7 +18,7 @@ def download_owid(run_date: pandas.Timestamp = None) -> pandas.DataFrame:
     NotImplementedError
         when a run_date earlier than today is passed
     """
-    if run_date > datetime.date.today():
+    if run_date.date() > datetime.date.today():
         raise ValueError("Run date is in the future. Nice try.")
     if run_date.date() < datetime.date.today():
         # TODO: implement downloading of historic data
