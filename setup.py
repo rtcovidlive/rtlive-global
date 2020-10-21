@@ -1,3 +1,4 @@
+
 #   Copyright 2020 Kevin Systrom
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +23,7 @@ DISTNAME = "rtlive"
 DESCRIPTION = "Model powering rt.live"
 AUTHOR = "Kevin Systrom, Thomas Vladeck"
 AUTHOR_EMAIL = "k@systrom.com"
-URL = "https://github.com/rtcovidlive/covid-model/"
+URL = "https://github.com/rtcovidlive/rtlive/"
 LICENSE = "Apache License, Version 2.0"
 
 classifiers = [
@@ -53,7 +54,7 @@ test_reqs = ["pytest"]
 
 
 def get_version():
-    VERSIONFILE = join("covid", "__init__.py")
+    VERSIONFILE = join("rtlive", "__init__.py")
     lines = open(VERSIONFILE, "rt").readlines()
     version_regex = r"^__version__ = ['\"]([^'\"]*)['\"]"
     for line in lines:
