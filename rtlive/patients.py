@@ -1,11 +1,25 @@
+import logging
+import numpy
 import os
-from scipy import stats as sps
-import numpy as np
-import pandas as pd
+import pandas
+import pathlib
 import requests
+import scipy.stats
+import tarfile
 
 
-def download_patient_data(file_path=None):
+_log = logging.getLogger(__file__)
+_DP_DATA = pathlib.Path(pathlib.Path(__file__).parent.parent, "data")
+if not _DP_DATA.exists():
+    _log.warning("Data directory at %s does not exist yet. Creating...")
+    _DP_DATA.mkdir()
+
+__all__ = [
+    "delay_distribution",
+]
+
+
+def _download_patient_data(file_path=None):
     """ Downloads patient data to data directory
         from: https://stackoverflow.com/questions/16694907/ """
     if not file_path:
@@ -19,7 +33,7 @@ def download_patient_data(file_path=None):
                     f.write(chunk)
 
 
-def get_patient_data(file_path=None, max_delay=60):
+def _read_patient_data(file_path=None, max_delay=60) -> pandas.DataFrame:
     """ Finds every valid delay between symptom onset and report confirmation
         from the patient line list and returns all the delay samples. """
     if not file_path:
@@ -66,37 +80,36 @@ def get_patient_data(file_path=None, max_delay=60):
     return patients
 
 
-def get_delays_from_patient_data(file_path=None, max_delay=60):
-    patients = get_patient_data(file_path=file_path, max_delay=max_delay)
+def _extract_test_delays_from_patient_data(file_path=None, max_delay=60):
+    patients = _read_patient_data(file_path=file_path, max_delay=max_delay)
     delays = (patients.Confirmed - patients.Onset).dt.days
     delays = delays.reset_index(drop=True)
     delays = delays[delays.le(max_delay)]
     return delays
 
 
-def get_delay_distribution():
-    """ Returns the empirical delay distribution between symptom onset and
-        confirmed positive case. """
+def delay_distribution(incubation_days=5) -> numpy.ndarray:
+    """ Returns the empirical delay distribution between symptom onset and confirmed positive case. """
 
     # The literature suggests roughly 5 days of incubation before becoming
     # having symptoms. See:
     # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7081172/
-    INCUBATION_DAYS = 5
-
-    try:
-        p_delay_path = os.path.join(os.path.dirname(__file__), "../data/p_delay.csv")
-        p_delay = pd.read_csv(p_delay_path, squeeze=True)
-    except FileNotFoundError:
-        delays = get_delays_from_patient_data()
+    p_delay_path = pathlib.Path(_DP_DATA, "p_delay.csv")
+    if p_delay_path.exists():
+        _log.info("Loading precomputed p_delay distribution from %s", p_delay_path)
+        p_delay = pandas.read_csv(p_delay_path, squeeze=True)
+    else:
+        _log.info("Precomputing testing delay distribution from patient data")
+        delays = _extract_test_delays_from_patient_data()
         p_delay = delays.value_counts().sort_index()
-        new_range = np.arange(0, p_delay.index.max() + 1)
+        new_range = numpy.arange(0, p_delay.index.max() + 1)
         p_delay = p_delay.reindex(new_range, fill_value=0)
         p_delay /= p_delay.sum()
         p_delay = (
-            pd.Series(np.zeros(INCUBATION_DAYS))
+            pandas.Series(numpy.zeros(incubation_days))
             .append(p_delay, ignore_index=True)
             .rename("p_delay")
         )
-        p_delay.to_csv("data/p_delay.csv", index=False)
+        p_delay.to_csv(pathlib.Path(_DP_DATA, "p_delay.csv"), index=False)
 
-    return p_delay
+    return p_delay.values
