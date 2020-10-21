@@ -46,8 +46,6 @@ def _to_convolution_ready_gt(gt, len_observed):
 
 
 class GenerativeModel:
-    version = "1.0.0"
-
     def __init__(self, region: str, observed: pd.DataFrame, buffer_days=10):
         """ Takes a region (ie State) name and observed new positive and
             total test counts per day. buffer_days is the default number of
@@ -59,14 +57,6 @@ class GenerativeModel:
         self.model = None
         self.observed = _reindex_observed(observed.dropna(subset=['positive', 'total']), buffer_days)
         self.region = region
-
-    def _scale_to_positives(self, data):
-        """ Scales a time series to have the same mean as the observed positives
-            time series. This is useful because many of the series we infer are
-            relative to their true values so we make them comparable by putting
-            them on the same scale. """
-        scale_factor = self.observed.positive.mean() / np.mean(data)
-        return scale_factor * data
 
     def build(self):
         """ Builds and returns the Generative model. Also sets self.model """
@@ -190,3 +180,35 @@ def sample(pmodel:pymc3.Model, **kwargs):
         )
         idata.posterior.attrs["model_version"] = __version__
     return idata
+
+
+def get_scale_factor(idata: arviz.InferenceData) -> xarray.DataArray:
+    """ Calculate a scaling factor so we can work/plot with
+    the inferred "infections" curve.
+    
+    The scaling factor depends on the probability that an infection is observed
+    (sum of p_delay distribution). The current p_delay distribution sums to 0.9999999,
+    so right now the scaling ASSUMES THAT THERE'S NO DARK FIGURE !!
+    Therefore the factor should be interpreted as the lower-bound!!
+
+    Parameters
+    ----------
+    idata : arviz.InferenceData
+        sampling result of Rtlive model v1.0.2 or higher
+
+    Returns
+    -------
+    factor : xarray.DataArray
+        scaling factors (sample,)
+    """
+    p_observe = numpy.sum(idata.constant_data.p_delay)
+    total_observed = numpy.sum(idata.constant_data.observed_positive)
+
+    # new method: normalizing using the integral of exposure-adjusted test_adjusted_positive
+    # - assumes that over time testing is not significantly steered towards high-risk individuals
+    exposure_profile = idata.constant_data.exposure / idata.constant_data.exposure.max()
+    total_inferred = (idata.posterior.test_adjusted_positive * exposure_profile) \
+        .stack(sample=('chain', 'draw')) \
+        .sum('date')
+    scale_factor = total_observed / total_inferred / p_observe
+    return scale_factor
