@@ -73,33 +73,23 @@ class TestData:
             )
 
 
-class TestDataGeneralized:
-    def test_get_unsupported(self):
-        with pytest.raises(KeyError):
-            covid.data.get_data(country="not_a_country", run_date=pandas.Timestamp("2020-06-20"))
-
-    def test_get_us(self):
-        import covid.data_us
-        assert "us" in covid.data.LOADERS
-        run_date = pandas.Timestamp('2020-06-25')
-        result = covid.data.get_data("us", run_date)
-        assert isinstance(result, pandas.DataFrame)
-        assert result.index.names == ("region", "date")
-        assert result.xs('NY').index[-1] < run_date
-        assert result.xs('NY').index[-1] == (run_date - pandas.DateOffset(1))
-        assert "positive" in result.columns
-        assert "total" in result.columns
-
-
-class TestGenerative:
+class TestModel:
     def test_build(self):
-        df_raw = covid.data.get_raw_covidtracking_data()
-        df_processed = covid.data.process_covidtracking_data(df_raw, pandas.Timestamp('2020-06-25'))
-        model = covid.models.generative.GenerativeModel(
-            region='NY',
-            observed=df_processed.xs('NY')
+        country_alpha2 = 'CH'
+        df_raw = data.get_data(
+            country_alpha2, datetime.datetime.today()
         )
-        pmodel = model.build()
+        df_processed, _ = data.process_testcounts(
+            country=country_alpha2,
+            df_raw=df_raw,
+        )
+        pmodel = model.build_model(
+            observed=df_processed.xs("all"), 
+            p_generation_time=assumptions.generation_time(),
+            test_col="predicted_new_tests",
+            p_delay=assumptions.delay_distribution(),
+            buffer_days=20
+        )
         assert isinstance(pmodel, pymc3.Model)
         # important coordinates
         assert "date" in pmodel.coords
@@ -110,21 +100,27 @@ class TestGenerative:
         assert not missing_vars, f'Missing variables: {missing_vars}'
 
     def test_sample_and_idata(self):
-        df_raw = covid.data.get_raw_covidtracking_data()
-        df_processed = covid.data.process_covidtracking_data(df_raw, pandas.Timestamp('2020-06-25'))
-        model = covid.models.generative.GenerativeModel(
-            region='NY',
-            observed=df_processed.xs('NY')
+        country_alpha2 = 'CH'
+        df_raw = data.get_data(
+            country_alpha2, datetime.datetime.today()
         )
-        model.build()
-        model.sample(
-            cores=1, chains=2, tune=5, draws=7
+        df_processed, _ = data.process_testcounts(
+            country=country_alpha2,
+            df_raw=df_raw,
         )
-        assert model.trace is not None
-        idata = model.inference_data
+        pmodel = model.build_model(
+            observed=df_processed.xs("all"), 
+            p_generation_time=assumptions.generation_time(),
+            test_col="predicted_new_tests",
+            p_delay=assumptions.delay_distribution(),
+            buffer_days=20
+        )
+        idata = model.sample(
+            pmodel, cores=1, chains=2, tune=5, draws=7
+        )
         assert isinstance(idata, arviz.InferenceData)
         # check posterior
-        assert idata.posterior.attrs["model_version"] == model.version
+        assert idata.posterior.attrs["model_version"] == model.__version__
         assert "chain" in idata.posterior.coords
         assert "draw" in idata.posterior.coords
         assert "date" in idata.posterior.coords
