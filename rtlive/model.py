@@ -17,7 +17,7 @@ _log = logging.getLogger(__file__)
 
 def _reindex_observed(observed:pandas.DataFrame, buffer_days:int=10):
     _log.info("Model will start with %i unobserved buffer days before the data.", buffer_days)
-    first_index = observed.positive.gt(0).argmax()
+    first_index = observed.new_cases.gt(0).argmax()
     observed = observed.iloc[first_index:]
     new_index = pandas.date_range(
         start=observed.index[0] - pandas.Timedelta(days=buffer_days),
@@ -48,6 +48,7 @@ def build_model(
     observed:pandas.DataFrame,
     p_generation_time:numpy.ndarray,
     p_delay:numpy.ndarray,
+    test_col:str,
     buffer_days:int=10,
     pmodel:typing.Optional[pymc3.Model]=None,
 ) -> pymc3.Model:
@@ -58,11 +59,14 @@ def build_model(
     Parameters
     ----------
     observed : pandas.DataFrame
-        date-indexed dataframe with "positive" (daily positives) and "total" (daily tests) columns
+        date-indexed dataframe with column "new_cases" (daily positives) 
+        and a column of daily tests whose name is specified by parameter [test_col]
     p_generation_time : numpy.ndarray
         numpy array that describes the generation time distribution
     p_delay : numpy.ndarray
         numpy array that describes the testing delay distribution
+    test_col : str
+        name of column with daily new tests (predicted or actual data)
     buffer_days : int
         number of days to prepend before the beginning of the data
     pmodel : optional, PyMC3 model
@@ -73,13 +77,14 @@ def build_model(
     pmodel : pymc3.Model
         the (created) PyMC3 model
     """
-    observed = _reindex_observed(observed.dropna(subset=['positive', 'total']), buffer_days)
+    observed = observed.rename(columns={test_col: "daily_tests"})
+    observed = _reindex_observed(observed.dropna(subset=['new_cases', 'daily_tests']), buffer_days)
 
     len_observed = len(observed)
     # precompute generation time interval vector to speed up tt.scan
     convolution_ready_gt = _to_convolution_ready_gt(p_generation_time, len_observed)
 
-    nonzero_days = observed.total.gt(0)
+    nonzero_days = observed.daily_tests.gt(0)
     coords = {
         "date": observed.index.values,
         "nonzero_date": observed.index.values[nonzero_days],
@@ -133,10 +138,10 @@ def build_model(
         # 0.1 * max_tests. The 0.1 only affects early values of Rt when
         # testing was minimal or when data errors cause underreporting
         # of tests.
-        tests = pymc3.Data("tests", observed.total.values, dims=["date"])
+        tests = pymc3.Data("tests", observed.daily_tests.values, dims=["date"])
         exposure = pymc3.Deterministic(
             "exposure",
-            pymc3.math.clip(tests, observed.total.max() * 0.1, 1e9),
+            pymc3.math.clip(tests, observed.daily_tests.max() * 0.1, 1e9),
             dims=["date"]
         )
 
@@ -149,8 +154,8 @@ def build_model(
         )
 
         # Save data as part of trace so we can access in inference_data
-        observed_positive = pymc3.Data("observed_positive", observed.positive.values, dims=["date"])
-        nonzero_observed_positive = pymc3.Data("nonzero_observed_positive", observed.positive[nonzero_days.values].values, dims=["nonzero_date"])
+        observed_positive = pymc3.Data("observed_positive", observed.new_cases.values, dims=["date"])
+        nonzero_observed_positive = pymc3.Data("nonzero_observed_positive", observed.new_cases[nonzero_days.values].values, dims=["nonzero_date"])
 
         positive_nonzero = pymc3.NegativeBinomial(
             "nonzero_positive",

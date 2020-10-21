@@ -1,19 +1,35 @@
-# Model powering rt.live
-This repository contains the code of the data processing and modeling behind https://rt.live.
+# Country-agnostic modeling of R<sub>t</sub>
+This repository contains code for data processing and modeling of COVID-19 reproduction number R<sub>t</sub>
+using the model that was developed for https://rt.live.
 
-__Because this code is running *in production*, the maintainers of this repository are *very* conservative about merging any PRs.__
+While the implementation of the model is completely country-independent, the code has a high-level interface that allows
+for easy plug-in support of new countries.
 
-## Application to Other Countries
-We have learned that it takes continuous attention to keep running the model. This is mostly due to data quality issues that are __best solved with local domain knowledge__.
+<!-- __Because this code is running *in production*, the maintainers of this repository are *very* conservative about merging any PRs.__ -->
 
-In other words, the maintainers behind this repo and http://rt.live don't currently have the resources to ensure high-quality analyses for other countries.
+## Where to find...
++ Explanations of the model &rarr; [notebooks/Tutorial_beginner](notebooks/Tutorial_beginner.ipynb), [notebooks/Tutorial_expert](notebooks/Tutorial_expert.ipynb)
++ How to run the model &rarr; [notebooks](notebooks/Tutorial_running.ipynb)
++ Working with data loading &rarr; [notebooks](notebooks/Tutorial_dataloading.ipynb)
 
-However, we encourage you to apply and improve the model for your country!
+
+## Adding Country Support
+We learned that artifacts in data often require manual intervention to be fixed.
+At the same time, data loading and processing must be fully automated to support running the data processing
+for tens or hundreds of regions every day.
+
+In this repository, we implemented a generalized data loading & processing interface that allows for:
++ supporting countries at national AND OR regional level
++ implementing country-specific interpolation / extrapolation / data cleaning routines
++ manual outlier removal & corrections
+
+Contributions to add/improve country support are very welcome!
 
 ## Contributing
-We are open to PRs that address aspects of the code or model that generalize across borders.
-For example on the topics of:
-+ docstrings (NumPy-style), 
+To contribute data sources, fix data outliers, or improve data quality for a specific country,
+please open a PR for the corresponding `data_xy.py` file in [rtlive/sources](rtlive/sources).
+
+Furthermore, we welcome contributions regarding...
 + testing
 + robustness against data outliers
 + computational performance
