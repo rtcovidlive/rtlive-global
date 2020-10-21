@@ -168,6 +168,7 @@ dmypy.json
 
 
 ################ CUSTOM ################
+*.idea
 *.vscode
 data/*
 Sandbox*.ipynb
