@@ -1,0 +1,19 @@
+name: rtlive
+channels:
+  - conda-forge
+dependencies:
+  - black
+  - fbprophet
+  - ipython
+  - iso3166
+  - jupyterlab
+  - libblas=*=*mkl
+  - matplotlib
+  - mkl-service
+  - pandas
+  - pip
+  - pymc3
+  - python-graphviz
+  - watermark
+  - pip:
+    - black_nbconvert
