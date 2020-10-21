@@ -15,6 +15,19 @@ from theano.tensor.signal.conv import conv2d
 from . import assumptions
 
 
+def _reindex_observed(observed:pandas.DataFrame, buffer_days:int=10):
+    _log.info("Model will start with %i unobserved buffer days before the data.", buffer_days)
+    first_index = observed.positive.gt(0).argmax()
+    observed = observed.iloc[first_index:]
+    new_index = pandas.date_range(
+        start=observed.index[0] - pandas.Timedelta(days=buffer_days),
+        end=observed.index[-1],
+        freq="D",
+    )
+    observed = observed.reindex(new_index, fill_value=0)
+    return observed
+
+
 def _to_convolution_ready_gt(gt, len_observed):
     """ Speeds up theano.scan by pre-computing the generation time interval
         vector. Thank you to Junpeng Lao for this optimization.
@@ -40,20 +53,10 @@ class GenerativeModel:
             blank days we pad on the leading edge of the time series because
             infections occur long before reports and we need to infer values
             on those days """
-
-        first_index = observed.positive.ne(0).argmax()
-        observed = observed.iloc[first_index:]
-        new_index = pd.date_range(
-            start=observed.index[0] - pd.Timedelta(days=buffer_days),
-            end=observed.index[-1],
-            freq="D",
-        )
-        observed = observed.reindex(new_index, fill_value=0)
-
         self._trace = None
         self._inference_data = None
         self.model = None
-        self.observed = observed
+        self.observed = _reindex_observed(observed.dropna(subset=['positive', 'total']), buffer_days)
         self.region = region
 
     @property
