@@ -14,6 +14,44 @@ from . import model
 from . import preprocessing
 
 
+def plot_vlines(
+    ax: matplotlib.axes.Axes,
+    vlines: preprocessing.NamedDates,
+    alignment: str,
+) -> None:
+    """ Helper function for marking special events with labeled vertical lines.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        the subplot to draw into
+    vlines : dict of { datetime : label }
+        the dates and labels for the lines
+    alignment : str
+        one of { "top", "bottom" }
+    """
+    ymin, ymax = ax.get_ylim()
+    xmin, xmax = ax.get_xlim()
+    for x, label in vlines.items():
+        if xmin <= ax.xaxis.convert_xunits(x) <= xmax:
+            label = textwrap.shorten(label, width=20, placeholder="...")
+            ax.axvline(x, color="gray", linestyle=":")
+            if alignment == 'top':
+                y = ymin+0.98*(ymax-ymin)
+            elif alignment == 'bottom':
+                y = ymin+0.02*(ymax-ymin)
+            else:
+                raise ValueError(f"Unsupported alignment: '{alignment}'")
+            ax.text(
+                x, y,
+                s=f'{label}\n',
+                color="gray",
+                rotation=90,
+                horizontalalignment="center",
+                verticalalignment=alignment,                
+            )
+    return None
+
 
 def plot_testcount_forecast(
     result: pandas.Series,
@@ -58,3 +96,41 @@ def plot_testcount_forecast(
     return ax
 
 
+def plot_testcount_components(
+    m: preprocessing.fbprophet.Prophet,
+    forecast: pandas.DataFrame,
+    considered_holidays: preprocessing.NamedDates
+) -> typing.Tuple[matplotlib.figure.Figure, typing.Sequence[matplotlib.axes.Axes]]:
+    """ Helper function to plot components of the Prophet forecast.
+
+    Parameters
+    ----------
+    m : fbprophet.Prophet
+        the prophet model
+    forecast : pandas.DataFrame
+        contains the prophet model prediction
+    considered_holidays : preprocesssing.NamedDates
+        the dictionary of named dates that were considered by the prophet model
+
+    Returns
+    -------
+    figure : matplotlib.figure.Figure
+        the created figure object
+    axs : array of matplotlib Axes
+        the subplots within the figure
+    """
+    fig = m.plot_components(
+        forecast[forecast.ds >= m.history.set_index('ds').index[0]],
+        figsize=(13.4, 8),
+        weekly_start=1,
+    )
+    axs = fig.axes
+    for ax in axs:
+        ax.set_xlabel('')
+    axs[0].set_ylim(0)
+    axs[1].set_ylim(-1)
+    plot_vlines(axs[0], considered_holidays, alignment='bottom')
+    plot_vlines(axs[1], {k:'' for k in considered_holidays.keys()}, alignment='bottom')
+    axs[0].set_xlim(pandas.to_datetime('2020-03-01'))
+    axs[1].set_xlim(pandas.to_datetime('2020-03-01'))
+    return fig, axs
