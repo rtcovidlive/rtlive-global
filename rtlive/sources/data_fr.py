@@ -13,7 +13,7 @@ from .. import data, preprocessing
 _log = logging.getLogger(__file__)
 
 
-def get_regions_metadata() -> [Tuple[Dict[str, str], Dict[str, float]]]:
+def get_regions_metadata() -> Tuple[Dict[str, str], Dict[str, float]]:
     """
     Link to regions' population: https://www.insee.fr/fr/statistiques/1893198
     Link to regions' codes: https://www.insee.fr/fr/information/2114819#titre-bloc-29
