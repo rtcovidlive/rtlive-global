@@ -6,7 +6,7 @@ import numpy
 import typing
 import pandas
 
-from . import preprocesing
+from . import preprocessing
 
 _log = logging.getLogger(__file__)
 LoadFunction = typing.Callable[
