@@ -166,9 +166,6 @@ def process_testcounts(
             f"The country '{country}' is not in the collection of supported countries."
         )
     df, results = SUPPORTED_COUNTRIES[country].fn_process(df_raw.copy())
-    # we modify the df index in forecast_FR function
-    if country != "FR":
-        assert df.index.equals(df_raw.index)
     assert isinstance(df, pandas.DataFrame)
     assert df.index.names == ("region", "date")
     assert "predicted_new_tests" in df.columns, f"Columns were: {df.columns}"
