@@ -94,7 +94,18 @@ def _extract_test_delays_from_patient_data(file_path=None, max_delay=60):
 
 
 def delay_distribution(incubation_days=5) -> numpy.ndarray:
-    """ Returns the empirical delay distribution between symptom onset and confirmed positive case. """
+    """ Returns the empirical delay distribution between symptom onset and confirmed positive case.
+    
+    Parameters
+    ----------
+    incubation_days : int
+        number of days with 0 probability of confirmation, to insert at the beginning
+
+    Returns
+    -------
+    p_delay : numpy.ndarray
+        distribution that describes the probability of positive tests since the day of infection
+    """
 
     # The literature suggests roughly 5 days of incubation before becoming
     # having symptoms. See:
@@ -120,9 +131,21 @@ def delay_distribution(incubation_days=5) -> numpy.ndarray:
     return p_delay.values
 
 
-def generation_time() -> numpy.ndarray:
+def generation_time(n_days: int=20) -> numpy.ndarray:
     """ Create a discrete P(Generation Interval)
-        Source: https://www.ijidonline.com/article/S1201-9712(20)30119-3/pdf """
+    Source: https://www.ijidonline.com/article/S1201-9712(20)30119-3/pdf
+        
+    Parameters
+    ----------
+    n_days : int
+        number of days to consider (cuts the tail)
+
+    Returns
+    -------
+    p_generation_time : numpy.ndarray
+        distribution that describes the probability of causing a secondary infection
+        by days since the primary infection
+    """
     mean_si = 4.7
     std_si = 2.9
     mu_si = numpy.log(mean_si ** 2 / numpy.sqrt(std_si ** 2 + mean_si ** 2))
@@ -130,7 +153,7 @@ def generation_time() -> numpy.ndarray:
     dist = scipy.stats.lognorm(scale=numpy.exp(mu_si), s=sigma_si)
 
     # Discretize the Generation Interval up to 20 days max
-    g_range = numpy.arange(0, 20)
+    g_range = numpy.arange(0, n_days)
     gt = pandas.Series(dist.cdf(g_range), index=g_range)
     gt = gt.diff().fillna(0)
     gt /= gt.sum()

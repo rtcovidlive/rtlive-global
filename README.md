@@ -8,9 +8,8 @@ for easy plug-in support of new countries.
 <!-- __Because this code is running *in production*, the maintainers of this repository are *very* conservative about merging any PRs.__ -->
 
 ## Where to find...
-+ Explanations of the model &rarr; [notebooks/Tutorial_beginner](notebooks/Tutorial_beginner.ipynb), [notebooks/Tutorial_expert](notebooks/Tutorial_expert.ipynb)
-+ How to run the model &rarr; [notebooks](notebooks/Tutorial_running.ipynb)
-+ Working with data loading &rarr; [notebooks](notebooks/Tutorial_dataloading.ipynb)
++ [Explanation of the model](notebooks/Tutorial_model.ipynb)
++ [Details on data loading/preprocessing](notebooks/Tutorial_dataloading.ipynb)
 
 
 ## Adding Country Support

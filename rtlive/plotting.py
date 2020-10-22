@@ -140,6 +140,7 @@ def plot_density_curves(
     idata: arviz.InferenceData,
     vlines: typing.Optional[preprocessing.NamedDates] = None,
     actual_tests: typing.Optional[pandas.Series] = None,
+    plot_positive: bool=False,
     fig=None,
     axs: numpy.ndarray=None,
 ):
@@ -151,6 +152,10 @@ def plot_density_curves(
         contains the MCMC trace and observed data
     vlines : preprocessing.NamedDates
         dictionary of { datetime.datetime : str } for drawing vertical lines
+    actual_tests : optional, pandas.Series
+        date-indexed series of daily confirmed cases
+    plot_positive : optional, bool
+        setting to include the prediction of confirmed cases that is directly comparable with the observations
     fig : optional, Figure
         a figure to use (in combination with [axs] argument)
     axs : optional, array of axes
@@ -195,14 +200,23 @@ def plot_density_curves(
             fill_alpha=.15,
         )
         handles.append(ax_curves.fill_between([], [], color=cmap(100), label=label))
-    label="positive tests"
+    if plot_positive:
+        # include the prediction of confirmed cases that is directly comparable with the observations
+        pymc3.gp.util.plot_gp_dist(
+            ax_curves,
+            x=idata.posterior["positive"].date.values[3:],
+            samples=(idata.posterior["positive"].stack(sample=('chain', 'draw')).values.T)[:, 3:],
+            samples_alpha=0,
+            palette="Blues",
+            fill_alpha=.15,
+        )
     ax_curves.set_ylabel("per day", fontsize=15)
 
     handles.append(
         ax_curves.bar(
             idata.constant_data.observed_positive.date.values,
             idata.constant_data.observed_positive,
-            label=label,
+            label="positive tests",
             alpha=0.5,
         )
     )
