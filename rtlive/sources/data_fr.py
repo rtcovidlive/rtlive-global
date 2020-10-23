@@ -168,7 +168,7 @@ def get_data_FR(run_date: pandas.Timestamp) -> pandas.DataFrame:
     # errors that creep in from the original link
     df_all = data.reset_index(level=1).groupby("date").sum().reset_index()
     df_all["region"] = "all"
-    true_region_codes = get_regions_metadata()["Name"].keys()
+    true_region_codes = get_regions_metadata()[0].keys()
     data = (
         data.append(df_all.set_index(["region", "date"]))
         .loc[true_region_codes]
