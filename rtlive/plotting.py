@@ -137,13 +137,21 @@ def plot_testcount_components(
     return fig, axs
 
 
-def plot_density_curves(
+def plot_details(
     idata: arviz.InferenceData,
+    *,
+    fig=None,
+    axs: numpy.ndarray=None,
     vlines: typing.Optional[preprocessing.NamedDates] = None,
     actual_tests: typing.Optional[pandas.Series] = None,
     plot_positive: bool=False,
-    fig=None,
-    axs: numpy.ndarray=None,
+    rt_comparisons: typing.Dict[
+        str,
+        typing.Tuple[pandas.Series, typing.Optional[pandas.Series], typing.Optional[pandas.Series], str]
+    ]=None,
+    locale_key: str=None,
+    label_translations: typing.Dict[str, str]=None,
+    license: str=None,
 ):
     """ Creates a figure that shows the most important results of the model for a particular region.
 
@@ -151,16 +159,31 @@ def plot_density_curves(
     ----------
     idata : arviz.InferenceData
         contains the MCMC trace and observed data
+    fig : optional, Figure
+        a figure to use (in combination with [axs] argument)
+    axs : optional, array of axes
+        four subplot axes to plot into (curves, testcounts, probability, r_t)
     vlines : preprocessing.NamedDates
         dictionary of { datetime.datetime : str } for drawing vertical lines
     actual_tests : optional, pandas.Series
         date-indexed series of daily confirmed cases
     plot_positive : optional, bool
         setting to include the prediction of confirmed cases that is directly comparable with the observations
-    fig : optional, Figure
-        a figure to use (in combination with [axs] argument)
-    axs : optional, array of axes
-        three subplot axes to plot into
+    rt_comparisons : optional, dict of tuples
+        can be used to include additional r_t value predictions
+        the keys become labels for the legend
+        the values are
+            a date-indexed pandas series of r_t values
+            (optional) a date-indexed pandas series of the lower bound
+            (optional) a date-indexed pandas series of the upper bound
+            the color for the line/interval
+    locale_key : str
+        allows to set the local via local.setlocale(locale.LC_TIME, locale_key)
+        for example "de_DE.UTF-8"
+    label_translations : dict
+        can be used to override labels in the plot (see code for the defaults)
+    license : optional, str
+        a license text to be included in the plot
 
     Returns
     -------
@@ -169,28 +192,44 @@ def plot_density_curves(
     (top, center, bottom) : tuple
         the subplots
     """
+    if locale_key:
+        locale.setlocale(locale.LC_TIME, locale_key)
+    if label_translations is None:
+        label_translations = {}
+    label_translations = {
+        "curves_ylabel": "per day",
+        "testcounts_ylabel": "daily\ntests",
+        "probability_ylabel": "probability\nof $R_t$>1",
+        "rt_ylabel": "$R_t$",
+        "curve_infections": "infections",
+        "curve_adjusted": "testing delay adjusted",
+        "bar_positive": "positive tests",
+        "bar_actual_tests": "actual tests",
+        "curve_predicted_tests": "predicted tests",
+        **label_translations
+    }
+
     # plot symptom onsets and R_t posteriors
     if not (fig != None and axs is not None):
-        fig, (ax_curves, ax_testcounts, ax_probability, ax_rt) = pyplot.subplots(
+        fig, axs = pyplot.subplots(
             nrows=4,
             gridspec_kw={"height_ratios": [3, 1, 1, 2]},
             dpi=140,
             figsize=(10, 8),
             sharex="col",
         )
-    else:
-        ax_curves, ax_testcounts, ax_probability, ax_rt = axs
+    ax_curves, ax_testcounts, ax_probability, ax_rt = axs
     handles = []
 
     scale_factor = model.get_scale_factor(idata)
 
+    # ============================================ curves
     # top subplot: counts
     # "infections" and "test_adjusted_positive" are modeled relative.
     var_label_colors= [
-        ('infections', 'infections', cm.Reds),
-        ('test_adjusted_positive', 'testing delay adjusted', cm.Greens)
+        ('infections', label_translations["curve_infections"], cm.Reds),
+        ('test_adjusted_positive', label_translations["curve_adjusted"], cm.Greens)
     ]
-
     for var, label, cmap in var_label_colors:
         pymc3.gp.util.plot_gp_dist(
             ax_curves,
@@ -211,18 +250,16 @@ def plot_density_curves(
             palette="Blues",
             fill_alpha=.15,
         )
-    ax_curves.set_ylabel("per day", fontsize=15)
+    ax_curves.set_ylabel(label_translations["curves_ylabel"], fontsize=12)
 
     handles.append(
         ax_curves.bar(
             idata.constant_data.observed_positive.date.values,
             idata.constant_data.observed_positive,
-            label="positive tests",
+            label=label_translations["bar_positive"],
             alpha=0.5,
         )
     )
-    if vlines:
-        plot_vlines(ax_curves, vlines, alignment='bottom')
     ax_curves.legend(
         handles=[
             *handles,
@@ -231,31 +268,30 @@ def plot_density_curves(
         frameon=False,
     )
 
+    # ============================================ testcounts
     ax_testcounts.plot(
         idata.constant_data.tests.date.values,
         idata.constant_data.tests.values,
         color="orange",
-        label="modeled",
+        label=label_translations["curve_predicted_tests"],
     )
     if actual_tests is not None:
         ax_testcounts.bar(
             actual_tests.index,
             actual_tests.values,
-            label="actual",
+            label=label_translations["bar_actual_tests"],
         )
     ax_testcounts.legend(frameon=False, loc="upper left")
-    if vlines:
-        plot_vlines(ax_testcounts, { k : "" for k, v in vlines.items() }, alignment="bottom")
-    ax_testcounts.set_ylabel("daily tests")
+    ax_testcounts.set_ylabel(label_translations["testcounts_ylabel"], fontsize=12)
 
-    # center subplot: probabilities
+    # ============================================ probabilities
     ax_probability.plot(
         idata.posterior.date, (idata.posterior.r_t > 1).mean(dim=("chain", "draw"))
     )
     ax_probability.set_ylim(0, 1)
-    ax_probability.set_ylabel("$p(R_t > 1)$", fontsize=15)
+    ax_probability.set_ylabel(label_translations["probability_ylabel"], fontsize=12)
 
-    # bottom subplot: R_t
+    # ============================================ R_t
     pymc3.gp.util.plot_gp_dist(
         ax=ax_rt,
         x=idata.posterior.date.values,
@@ -263,16 +299,52 @@ def plot_density_curves(
         samples_alpha=0,
     )
     ax_rt.axhline(1, linestyle=":")
-    ax_rt.set_ylabel("$R_t$", fontsize=15)
+    ax_rt.set_ylabel(label_translations["rt_ylabel"], fontsize=12)
     ax_rt.xaxis.set_major_locator(
         matplotlib.dates.WeekdayLocator(interval=1, byweekday=matplotlib.dates.MO)
     )
     ax_rt.xaxis.set_minor_locator(matplotlib.dates.DayLocator())
     ax_rt.xaxis.set_tick_params(rotation=90)
     ax_rt.set_ylim(0, 2.5)
+    ax_rt.set_xlim(right=datetime.datetime.utcnow() + datetime.timedelta(hours=12))
 
+    # additional R_t entries
+    if rt_comparisons:
+        for label, (comp_rt, lower, upper, color) in rt_comparisons.items():
+            ax_rt.plot(
+                comp_rt.index, 
+                comp_rt.values, 
+                color=color,
+                label=label
+            )
+            if lower is not None and upper is not None:
+                ax_rt.fill_between(
+                    lower.index,
+                    lower.values, upper.values,
+                    alpha=.15, color=color,
+                )
+        ax_rt.legend(frameon=False)
+
+    # ============================================ figure elements
+    if license:
+        # embed license notice directly in the plot
+        axs[0].text(
+            1.0, 1.01,
+            license,
+            transform=axs[0].transAxes,
+            color='#AAAAAA',
+            horizontalalignment='right',
+            verticalalignment='bottom',
+            fontsize=8,
+        )
+    if vlines:
+        plot_vlines(ax_testcounts, {k:'' for k in vlines.keys()}, alignment='top')
+        plot_vlines(ax_probability, {k:'' for k in vlines.keys()}, alignment='top')
+        plot_vlines(ax_rt, vlines, alignment='bottom')
+
+    fig.align_ylabels(axs)
     fig.tight_layout()
-    return fig, (ax_curves, ax_testcounts, ax_probability, ax_rt)
+    return fig, axs
 
 
 def plot_thumbnails(idata, *, locale_key=None, license=True):
@@ -302,7 +374,7 @@ def plot_thumbnails(idata, *, locale_key=None, license=True):
     if license:
         ax.text(
             0.03, 0.03,
-            'CC BY-SA 4.0\nRtlive.de / Forschungszentrum Jülich',
+            license,
             transform=ax.transAxes,
             color='#AAAAAA',
             horizontalalignment='left',
