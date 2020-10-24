@@ -1,4 +1,5 @@
 import datetime
+import locale
 import numpy
 import matplotlib
 from matplotlib import pyplot, cm
@@ -272,3 +273,41 @@ def plot_density_curves(
 
     fig.tight_layout()
     return fig, (ax_curves, ax_testcounts, ax_probability, ax_rt)
+
+
+def plot_thumbnails(idata, *, locale_key=None, license=True):
+    if locale_key:
+        locale.setlocale(locale.LC_TIME, locale_key)
+    fig, ax = pyplot.subplots(dpi=120, figsize=(6, 4))
+
+    pymc3.gp.util.plot_gp_dist(
+        ax=ax,
+        x=idata.posterior.date.values,
+        samples=idata.posterior.r_t.stack(sample=("chain", "draw")).T.values,
+        samples_alpha=0,
+    )
+    ax.axhline(1, linestyle=":")
+    ax.set_ylabel("$R_t$", fontsize=20)
+    ax.xaxis.set_major_locator(
+        matplotlib.dates.MonthLocator(interval=1),
+    )
+    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%b'))
+    ax.xaxis.set_minor_locator(matplotlib.dates.WeekdayLocator(interval=1, byweekday=matplotlib.dates.MO))
+    ax.xaxis.set_tick_params(rotation=0, labelsize=16)
+    ax.yaxis.set_tick_params(labelsize=16)
+    ax.set_ylim(0, 2.5)
+    ax.set_xlim(idata.posterior.date[0], datetime.datetime.today())
+
+    # embed license notice directly in the plot
+    if license:
+        ax.text(
+            0.03, 0.03,
+            'CC BY-SA 4.0\nRtlive.de / Forschungszentrum Jülich',
+            transform=ax.transAxes,
+            color='#AAAAAA',
+            horizontalalignment='left',
+            fontsize=6,
+        )
+
+    fig.tight_layout()
+    return fig, ax
