@@ -233,3 +233,54 @@ def get_scale_factor(idata: arviz.InferenceData) -> xarray.DataArray:
         .sum('date')
     scale_factor = total_observed / total_inferred / p_observe
     return scale_factor
+
+
+def get_case_curves(idata: arviz.InferenceData) -> typing.Tuple[xarray.DataArray, xarray.DataArray, xarray.DataArray]:
+    """ Calculates curves of daily new cases, total cases and active cases
+    from a sampling result.
+
+    Parameters
+    ----------
+    idata : arviz.InferenceData
+        the sampling result
+
+    Returns
+    -------
+    new_cases : xarray.DataArray
+        curve distribution of daily new cases
+    total_cases : xarray.DataArray
+        curve distribution of cumulative cases
+    active_cases : xarray.DataArray
+        curve distribution of actively infectious cases.
+        Weights the cases by their probability of being infectious
+        as implied by the generation time distribution.
+    """
+    # start from the posterior of (normalized) daily new infections
+    infections = idata.posterior.infections.stack(sample=('chain', 'draw'))
+    days, samples = infections.shape
+    # scaled up to actual numbers
+    scale_factor = get_scale_factor(idata)
+    new_cases = infections * scale_factor
+
+    # total case count is just a cumulative sum
+    total_cases = numpy.cumsum(new_cases, axis=0)
+    assert total_cases.shape == (days, samples)
+    total_cases = xarray.DataArray(total_cases, coords={
+        'date': idata.posterior.date.values,
+        'sample': numpy.arange(total_cases.shape[1])
+    }, dims=('date', 'sample'))
+
+    # number of active cases over time depends on the generation time, which
+    # we can re-interpret into a probability of a case being active (decays over time)
+    p_active = 1 - numpy.cumsum(idata.constant_data.p_generation_time.values)
+    # convolution of the above gives a curve of active cases
+    convolve = numpy.vectorize(numpy.convolve, signature='(n),(m)->(k)')
+    active_cases = convolve(new_cases.T, p_active).T[:days, :]
+    assert active_cases.shape == (days, samples), active_cases.shape
+    assert active_cases.shape == (days, samples)
+    active_cases = xarray.DataArray(active_cases, coords={
+        'date': idata.posterior.date.values,
+        'sample': numpy.arange(active_cases.shape[1])
+    }, dims=('date', 'sample'))
+
+    return new_cases, total_cases, active_cases
