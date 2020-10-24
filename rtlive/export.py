@@ -6,6 +6,8 @@ import typing
 
 import arviz
 
+from . import data
+
 
 def summarize_median_and_hdi(samples, prefix:str, hdi_prob:typing.Union[float, typing.Iterable[float]]=0.9) -> typing.Dict[str, float]:
     """ Extract median, lower and upper bound and return it as a dict.
@@ -53,20 +55,13 @@ def summarize_r_t(samples, hdi_prob=0.9):
     }
 
 
-def summarize_infections(samples, region, date, hdi_prob=0.9) -> typing.Dict[str, float]:
-    """ Summarizes lower/upper bounds of daily infections and the probability
-    that the infection rate is greater than 20/100_000/week at that day.
-    """
-    # Berliner "Corona-Ampel" nimmt 20/100_000/week als "gr�n"
-    # Hier wird dies pro Tag heruntergebrochen
-    population = DE_REGION_POPULATION[region]
-    threshold_by_100k = 20 / 7
-    absolute_threshold = population * threshold_by_100k / 100_000
+def summarize_infections(
+    samples,
+    population,
+    hdi_prob=0.9
+) -> typing.Dict[str, float]:
+    """ Summarizes lower/upper bounds of daily infections """
     return {
-        "population": population,
-        "infections_threshold_by_100k": threshold_by_100k,
-        "infections_threshold_absolute": absolute_threshold,
-        "infections_threshold_probability": float(numpy.mean(samples > absolute_threshold)),
         **summarize_median_and_hdi(samples / population * 100_000, "infections_by_100k", hdi_prob=hdi_prob),
         **summarize_median_and_hdi(samples, "infections_absolute", hdi_prob=hdi_prob),
     }
