@@ -1,9 +1,11 @@
 import datetime
+from matplotlib import pyplot
 import numpy
 import os
 import pandas
 import pathlib
 import pytest
+import xarray
 
 import arviz
 import pymc3
@@ -11,6 +13,12 @@ import pymc3
 from . import assumptions
 from . import data
 from . import model
+from . import plotting
+
+
+IDATA_FILENAMES = [
+    "DE_2020-10-26_all_v1.0.2.nc",
+]
 
 
 class TestData:
@@ -116,7 +124,7 @@ class TestModel:
             df_raw=df_raw,
         )
         pmodel = model.build_model(
-            observed=df_processed.xs("all"), 
+            observed=df_processed.xs("all"),
             p_generation_time=assumptions.generation_time(),
             test_col="predicted_new_tests",
             p_delay=assumptions.delay_distribution(),
@@ -146,6 +154,28 @@ class TestModel:
         missing_vars = expected_vars.difference(set(idata.constant_data.keys()))
         assert not missing_vars, f'Missing {missing_vars} from constant_data group'
 
+    @pytest.mark.parametrize("filename", IDATA_FILENAMES)
+    def test_get_case_curves(self, filename):
+        fp = pathlib.Path(pathlib.Path(__file__).parent, "testdata", filename)
+        idata = arviz.from_netcdf(str(fp))
+        assert isinstance(idata, arviz.InferenceData)
+        case_curves = model.get_case_curves(idata)
+        assert isinstance(case_curves, tuple)
+        for obj in case_curves:
+            assert isinstance(obj, xarray.DataArray)
+            assert obj.coords.dims == ("date", "sample")
+
+    @pytest.mark.parametrize("filename", IDATA_FILENAMES)
+    def test_get_scale_factor(self, filename):
+        fp = pathlib.Path(pathlib.Path(__file__).parent, "testdata", filename)
+        idata = arviz.from_netcdf(str(fp))
+        assert isinstance(idata, arviz.InferenceData)
+        scale_factor = model.get_scale_factor(idata)
+        assert isinstance(scale_factor, xarray.DataArray)
+        assert scale_factor.coords.dims == ("sample",)
+        assert 1000 < scale_factor.mean() < 200_000
+
+
 class TestSources:
     @pytest.mark.parametrize("fp_submodule", pathlib.Path(os.path.join(os.path.dirname(__file__), "sources")).glob("*.py"))
     def test_imports(self, fp_submodule):
@@ -156,3 +186,25 @@ class TestSources:
         )
         imported_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(imported_module)
+
+
+class TestPlotting:
+    @pytest.mark.parametrize("filename", IDATA_FILENAMES)
+    @pytest.mark.parametrize("plot_positive", [None, "all", "unobserved"])
+    def test_plot_details(self, filename, plot_positive):
+        fp = pathlib.Path(pathlib.Path(__file__).parent, "testdata", filename)
+        idata = arviz.from_netcdf(str(fp))
+        assert isinstance(idata, arviz.InferenceData)
+        fig, axs = plotting.plot_details(
+            idata,
+            plot_positive=plot_positive
+        )
+        pyplot.close()
+
+    @pytest.mark.parametrize("filename", IDATA_FILENAMES)
+    def test_plot_thumbnail(self, filename):
+        fp = pathlib.Path(pathlib.Path(__file__).parent, "testdata", filename)
+        idata = arviz.from_netcdf(str(fp))
+        assert isinstance(idata, arviz.InferenceData)
+        fig, axs = plotting.plot_thumbnails(idata)
+        pyplot.close()
