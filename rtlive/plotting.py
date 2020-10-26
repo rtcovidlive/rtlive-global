@@ -144,7 +144,7 @@ def plot_details(
     axs: numpy.ndarray=None,
     vlines: typing.Optional[preprocessing.NamedDates] = None,
     actual_tests: typing.Optional[pandas.Series] = None,
-    plot_positive: bool=False,
+    plot_positive: str=None,
     rt_comparisons: typing.Dict[
         str,
         typing.Tuple[pandas.Series, typing.Optional[pandas.Series], typing.Optional[pandas.Series], str]
@@ -167,8 +167,9 @@ def plot_details(
         dictionary of { datetime.datetime : str } for drawing vertical lines
     actual_tests : optional, pandas.Series
         date-indexed series of daily confirmed cases
-    plot_positive : optional, bool
+    plot_positive : optional, str
         setting to include the prediction of confirmed cases that is directly comparable with the observations
+        options: { "all", "unobserved" }
     rt_comparisons : optional, dict of tuples
         can be used to include additional r_t value predictions
         the keys become labels for the legend
@@ -203,6 +204,7 @@ def plot_details(
         "rt_ylabel": "$R_t$",
         "curve_infections": "infections",
         "curve_adjusted": "testing delay adjusted",
+        "predicted_postive_tests": None,
         "bar_positive": "positive tests",
         "bar_actual_tests": "actual tests",
         "curve_predicted_tests": "predicted tests",
@@ -223,38 +225,60 @@ def plot_details(
 
     scale_factor = model.get_scale_factor(idata)
 
+    # extract relevant coords without explicitly using their names
+    # This is to maintain compatibility with <v1.1.0 inferences.
+    date = tuple(idata.posterior["r_t"].coords.values())[-1].values
+    date_with_cases = tuple(idata.constant_data["observed_positive"].coords.values())[-1].values
+
+    # key dates that are used to slice things in the visualization
+    day_3 = date[3]
+    day_last = date[-1]
+    day_last_cases = date_with_cases[-1]
+
     # ============================================ curves
     # top subplot: counts
     # "infections" and "test_adjusted_positive" are modeled relative.
     var_label_colors= [
-        ('infections', label_translations["curve_infections"], cm.Reds),
-        ('test_adjusted_positive', label_translations["curve_adjusted"], cm.Greens)
+        ('infections', label_translations["curve_infections"], cm.Reds, True, (day_3, day_last_cases)),
+        ('test_adjusted_positive', label_translations["curve_adjusted"], cm.Greens, True, (day_3, day_last)),
     ]
-    for var, label, cmap in var_label_colors:
+    if plot_positive == "all":
+        var_label_colors.append(
+            ('positive', label_translations["predicted_postive_tests"], cm.Blues, False, (day_3, day_last)),
+        )
+    elif plot_positive == "unobserved":
+        var_label_colors.append(
+            ('positive', label_translations["predicted_postive_tests"], cm.Blues, False, (day_last_cases, day_last)),
+        )
+
+    for var, label, cmap, scale, (d_from, d_to) in var_label_colors:
+        # get the posterior samples
+        pst_val = idata.posterior[var].stack(sample=('chain', 'draw'))
+        # scale them if necessary
+        if scale:
+            samples = (pst_val * scale_factor).T
+        else:
+            samples = pst_val.T
+        # slice the samples into the parametrized date range
+        coord_name = pst_val.coords.dims[0]
+        samples = samples.sel({ coord_name : slice(d_from, d_to) })
+        # finally plot them as density bands
         pymc3.gp.util.plot_gp_dist(
             ax_curves,
-            x=idata.posterior[var].date.values[3:],
-            samples=((idata.posterior[var].stack(sample=('chain', 'draw')) * scale_factor).values.T)[:, 3:],
+            x=samples[coord_name].values,
+            samples=samples.values,
             samples_alpha=0,
             palette=cmap,
             fill_alpha=.15,
         )
-        handles.append(ax_curves.fill_between([], [], color=cmap(100), label=label))
-    if plot_positive:
-        # include the prediction of confirmed cases that is directly comparable with the observations
-        pymc3.gp.util.plot_gp_dist(
-            ax_curves,
-            x=idata.posterior["positive"].date.values[3:],
-            samples=(idata.posterior["positive"].stack(sample=('chain', 'draw')).values.T)[:, 3:],
-            samples_alpha=0,
-            palette="Blues",
-            fill_alpha=.15,
-        )
+        if label:
+            handles.append(ax_curves.fill_between([], [], color=cmap(100), label=label))
     ax_curves.set_ylabel(label_translations["curves_ylabel"], fontsize=12)
 
+    coord_observed_positive = idata.constant_data.observed_positive.coords.dims[-1]
     handles.append(
         ax_curves.bar(
-            idata.constant_data.observed_positive.date.values,
+            idata.constant_data.observed_positive[coord_observed_positive].values,
             idata.constant_data.observed_positive,
             label=label_translations["bar_positive"],
             alpha=0.5,
@@ -269,8 +293,9 @@ def plot_details(
     )
 
     # ============================================ testcounts
+    coord_tests = idata.constant_data.tests.coords.dims[-1]
     ax_testcounts.plot(
-        idata.constant_data.tests.date.values,
+        idata.constant_data.tests[coord_tests].values,
         idata.constant_data.tests.values,
         color="orange",
         label=label_translations["curve_predicted_tests"],
@@ -306,14 +331,17 @@ def plot_details(
     ax_rt.xaxis.set_minor_locator(matplotlib.dates.DayLocator())
     ax_rt.xaxis.set_tick_params(rotation=90)
     ax_rt.set_ylim(0, 2.5)
-    ax_rt.set_xlim(right=datetime.datetime.utcnow() + datetime.timedelta(hours=12))
+    ax_rt.set_xlim(
+        left=day_3,
+        right=pandas.Timestamp(day_last) + datetime.timedelta(hours=36)
+    )
 
     # additional R_t entries
     if rt_comparisons:
         for label, (comp_rt, lower, upper, color) in rt_comparisons.items():
             ax_rt.plot(
-                comp_rt.index, 
-                comp_rt.values, 
+                comp_rt.index,
+                comp_rt.values,
                 color=color,
                 label=label
             )
