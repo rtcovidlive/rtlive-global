@@ -1,4 +1,5 @@
 import dataclasses
+import datetime
 import enum
 import iso3166
 import logging
@@ -141,8 +142,39 @@ def get_data(country: str, run_date: pandas.Timestamp) -> pandas.DataFrame:
     return result
 
 
+def _insert_future(df_raw: pandas.DataFrame, *, future_days: int):
+    """ Inserts new rows for dates that go beyond what's already in the index.
+
+    Parameters
+    ----------
+    df_raw : pandas.DataFrame
+        a [region, date]-indexed dataframe
+    future_days : int
+        number of days to append after the last date (in every region)
+
+    Returns
+    -------
+    df : pandas.DataFrame
+        a new DataFrame that has rows of NaN for the new dates
+    """
+    dfs_with_future = []
+    regions = df_raw.reset_index().region.unique()
+    for region in regions:
+        latest = df_raw.xs(region).index[-1]
+        df_region = df_raw.xs(region)
+        new_index = pandas.date_range(
+            df_region.index[0],
+            latest + datetime.timedelta(days=future_days),
+            freq="D",
+            name="date"
+        )
+        dfs_with_future.append(df_region.reindex(new_index, fill_value=numpy.nan))
+    return pandas.concat(dfs_with_future, keys=regions, names=["region", "date"])
+
+
 def process_testcounts(
-    country: str, df_raw: pandas.DataFrame
+    country: str, df_raw: pandas.DataFrame,
+    future_days: int=0,
 ) -> typing.Tuple[pandas.DataFrame, typing.Dict[str, preprocessing.ForecastingResult]]:
     """ Fills and forecasts test counts with country-specific logic.
 
@@ -152,6 +184,9 @@ def process_testcounts(
         ISO-3166 alpha-2 short code of the country (key in FORECASTERS dict)
     df_raw : pandas.DataFrame
         Data as returned by data loader function.
+    future_days : int
+        Number of days to append after the last date (in every region).
+        Can be used to predict testcounts for days that are not yet covered by any data.
 
     Returns
     -------
@@ -165,6 +200,10 @@ def process_testcounts(
         raise KeyError(
             f"The country '{country}' is not in the collection of supported countries."
         )
+    # insert date index for prediction into the future
+    if future_days > 0:
+        df_raw = _insert_future(df_raw, future_days=future_days)
+    # make testcount forecast
     df, results = SUPPORTED_COUNTRIES[country].fn_process(df_raw.copy())
     assert isinstance(df, pandas.DataFrame)
     assert df.index.names == ("region", "date")
