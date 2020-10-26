@@ -11,7 +11,7 @@ import theano.tensor.signal.conv
 import xarray
 
 
-__version__ = '1.0.2'
+__version__ = '1.1.0'
 _log = logging.getLogger(__file__)
 
 
@@ -24,7 +24,7 @@ def _reindex_observed(observed:pandas.DataFrame, buffer_days:int=10):
         end=observed.index[-1],
         freq="D",
     )
-    observed = observed.reindex(new_index, fill_value=0)
+    observed = observed.reindex(new_index, fill_value=numpy.nan)
     return observed
 
 
@@ -78,18 +78,37 @@ def build_model(
         the (created) PyMC3 model
     """
     observed = observed.rename(columns={test_col: "daily_tests"})
-    observed = _reindex_observed(observed.dropna(subset=['new_cases', 'daily_tests']), buffer_days)
+    # Reindex to make sure that there are no gaps.
+    # Also add (unobserved) buffer days at the beginning.
+    observed = _reindex_observed(observed, buffer_days)
 
-    len_observed = len(observed)
-    # precompute generation time interval vector to speed up tt.scan
-    convolution_ready_gt = _to_convolution_ready_gt(p_generation_time, len_observed)
+    # make boolean masks to filter for dates that have case data, testcount data or both
+    has_cases = ~numpy.isnan(observed.new_cases).values
+    has_testcounts = ~numpy.isnan(observed.daily_tests).values
+    has_data = has_cases & has_testcounts
+    # masks that can be used w.r.t. subsets of the dates.
+    # These are used to slice tensors that are already shorter than the full length.
+    has_data_wrt_cases = has_data[has_cases]
+    has_data_wrt_testcounts = has_data[has_testcounts]
 
-    nonzero_days = observed.daily_tests.gt(0)
     coords = {
+        # this is the full lenght of dates (without gaps) covered by the generative part of the model
         "date": observed.index.values,
-        "nonzero_date": observed.index.values[nonzero_days],
+        # these are subsets of dates where case/testcount data is available
+        "date_with_cases": observed.index.values[has_cases],
+        "date_with_testcounts": observed.index.values[has_testcounts],
+        # and the dates with both case & testcount data (for the likelihood)
+        "date_with_data": observed.index.values[has_data],
     }
     N_dates = len(coords["date"])
+    N_with_cases = len(coords["date_with_cases"])
+    N_with_testcounts = len(coords["date_with_testcounts"])
+    N_with_data = len(coords["date_with_data"])
+    _log.info(
+        "The model describes %i days of which %i have case data and %i have testcount data. %i days have both.",
+        N_dates, N_with_cases, N_with_testcounts, N_with_data
+    )
+
     if not pmodel:
         pmodel = pymc3.Model(coords=coords)
 
@@ -142,31 +161,31 @@ def build_model(
         # 0.1 * max_tests. The 0.1 only affects early values of Rt when
         # testing was minimal or when data errors cause underreporting
         # of tests.
-        tests = pymc3.Data("tests", observed.daily_tests.values, dims=["date"])
+        tests = pymc3.Data("tests", observed.daily_tests[has_testcounts], dims=["date_with_testcounts"])
         exposure = pymc3.Deterministic(
             "exposure",
             pymc3.math.clip(tests, observed.daily_tests.max() * 0.1, 1e9),
-            dims=["date"]
+            dims=["date_with_testcounts"]
         )
 
         # Test-volume adjust reported cases based on an assumed exposure
         # Note: this is similar to the exposure parameter in a Poisson
         # regression.
         positive = pymc3.Deterministic(
-            "positive", exposure * test_adjusted_positive,
-            dims=["date"]
+            "positive", exposure * test_adjusted_positive[has_testcounts],
+            dims=["date_with_testcounts"]
         )
+        positive_where_data = pymc3.Deterministic("positive_where_data", positive[has_data_wrt_testcounts], dims=["date_with_data"])
 
-        # Save data as part of trace so we can access in inference_data
-        observed_positive = pymc3.Data("observed_positive", observed.new_cases.values, dims=["date"])
-        nonzero_observed_positive = pymc3.Data("nonzero_observed_positive", observed.new_cases[nonzero_days.values].values, dims=["nonzero_date"])
+        observed_positive = pymc3.Data("observed_positive", observed.new_cases[has_cases], dims=["date_with_cases"])
+        observed_positive_where_data = pymc3.Data("observed_positive_where_data", observed.new_cases[has_cases][has_data_wrt_cases], dims=["date_with_data"])
 
-        positive_nonzero = pymc3.NegativeBinomial(
-            "nonzero_positive",
-            mu=positive[nonzero_days.values],
+        likelihood = pymc3.NegativeBinomial(
+            "likelihood",
+            mu=positive_where_data,
             alpha=pymc3.Gamma("alpha", mu=6, sigma=1),
-            observed=nonzero_observed_positive,
-            dims=["nonzero_date"]
+            observed=observed_positive_where_data,
+            dims=["date_with_data"]
         )
     return pmodel
 

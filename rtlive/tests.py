@@ -106,7 +106,9 @@ class TestModel:
         assert isinstance(pmodel, pymc3.Model)
         # important coordinates
         assert "date" in pmodel.coords
-        assert "nonzero_date" in pmodel.coords
+        assert "date_with_cases" in pmodel.coords
+        assert "date_with_testcounts" in pmodel.coords
+        assert "date_with_data" in pmodel.coords
         # important random variables
         expected_vars = set(['r_t', 'seed', 'infections', 'test_adjusted_positive', 'exposure', 'positive', 'alpha'])
         missing_vars = expected_vars.difference(set(pmodel.named_vars.keys()))
@@ -143,14 +145,14 @@ class TestModel:
         missing_vars = expected_vars.difference(set(idata.posterior.keys()))
         assert not missing_vars, f'Missing {missing_vars} from posterior group'
         # check observed_data
-        assert "nonzero_date" in idata.observed_data.coords
-        expected_vars = set(["nonzero_positive"])
+        assert "date_with_data" in idata.observed_data.coords
+        expected_vars = set(["likelihood"])
         missing_vars = expected_vars.difference(set(idata.observed_data.keys()))
         assert not missing_vars, f'Missing {missing_vars} from observed_data group'
         # check constant_data
-        assert "date" in idata.constant_data.coords
-        assert "nonzero_date" in idata.constant_data.coords
-        expected_vars = set(["exposure", "tests", "observed_positive", "nonzero_observed_positive"])
+        assert "date_with_cases" in idata.constant_data.coords
+        assert "date_with_testcounts" in idata.constant_data.coords
+        expected_vars = set(["exposure", "tests", "observed_positive", "observed_positive_where_data"])
         missing_vars = expected_vars.difference(set(idata.constant_data.keys()))
         assert not missing_vars, f'Missing {missing_vars} from constant_data group'
 
