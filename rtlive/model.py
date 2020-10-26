@@ -89,6 +89,7 @@ def build_model(
         "date": observed.index.values,
         "nonzero_date": observed.index.values[nonzero_days],
     }
+    N_dates = len(coords["date"])
     if not pmodel:
         pmodel = pymc3.Model(coords=coords)
 
@@ -102,21 +103,24 @@ def build_model(
         )
         r_t = pymc3.Deterministic("r_t", pymc3.math.exp(log_r_t), dims=["date"])
 
+        # Save data as part of trace so we can access in inference_data
         t_generation_time = pymc3.Data("p_generation_time", p_generation_time)
+        # precompute generation time interval vector to speed up tt.scan
+        convolution_ready_gt = _to_convolution_ready_gt(p_generation_time, N_dates)
         # For a given seed population and R_t curve, we calculate the
         # implied infection curve by simulating an outbreak. While this may
         # look daunting, it's simply a way to recreate the outbreak
         # simulation math inside the model:
         # https://staff.math.su.se/hoehle/blog/2020/04/15/effectiveR0.html
         seed = pymc3.Exponential("seed", 1 / 0.02)
-        y0 = tt.zeros(len_observed)
+        y0 = tt.zeros(N_dates)
         y0 = tt.set_subtensor(y0[0], seed)
         outputs, _ = theano.scan(
             fn=lambda t, gt, y, r_t: tt.set_subtensor(y[t], tt.sum(r_t * y * gt)),
-            sequences=[tt.arange(1, len_observed), convolution_ready_gt],
+            sequences=[tt.arange(1, N_dates), convolution_ready_gt],
             outputs_info=y0,
             non_sequences=r_t,
-            n_steps=len_observed - 1,
+            n_steps=N_dates - 1,
         )
         infections = pymc3.Deterministic("infections", outputs[-1], dims=["date"])
 
@@ -127,10 +131,10 @@ def build_model(
         test_adjusted_positive = pymc3.Deterministic(
             "test_adjusted_positive",
             theano.tensor.signal.conv.conv2d(
-                tt.reshape(infections, (1, len_observed)),
+                tt.reshape(infections, (1, N_dates)),
                 tt.reshape(t_p_delay, (1, len(p_delay))),
                 border_mode="full",
-            )[0, :len_observed],
+            )[0, :N_dates],
             dims=["date"]
         )
 
