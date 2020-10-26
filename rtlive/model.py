@@ -210,7 +210,7 @@ def sample(pmodel:pymc3.Model, **kwargs):
 def get_scale_factor(idata: arviz.InferenceData) -> xarray.DataArray:
     """ Calculate a scaling factor so we can work/plot with
     the inferred "infections" curve.
-    
+
     The scaling factor depends on the probability that an infection is observed
     (sum of p_delay distribution). The current p_delay distribution sums to 0.9999999,
     so right now the scaling ASSUMES THAT THERE'S NO DARK FIGURE !!
@@ -229,11 +229,23 @@ def get_scale_factor(idata: arviz.InferenceData) -> xarray.DataArray:
     p_observe = numpy.sum(idata.constant_data.p_delay)
     total_observed = numpy.sum(idata.constant_data.observed_positive)
 
+    # coords changed with model v1.1.0. This ensure backwards-compatibility.
+    coord_tap = idata.posterior.test_adjusted_positive.coords.dims[-1]
+    coord_exposure = idata.constant_data.exposure.coords.dims[-1]
+
+    # test_adjusted_positive covers the full range - exposure profile not
+    # so we need a mask to filter out dates for which the exposure is unknown
+    date_with_testcounts = set(tuple(idata.posterior[coord_tap].values))
+    has_testcounts = numpy.array([
+        d in date_with_testcounts
+        for d in idata.posterior.date.values
+    ])
+
     # new method: normalizing using the integral of exposure-adjusted test_adjusted_positive
     # - assumes that over time testing is not significantly steered towards high-risk individuals
     exposure_profile = idata.constant_data.exposure / idata.constant_data.exposure.max()
-    total_inferred = (idata.posterior.test_adjusted_positive * exposure_profile) \
-        .stack(sample=('chain', 'draw')) \
+    total_inferred = idata.posterior.test_adjusted_positive \
+        .stack(sample=('chain', 'draw'))[has_testcounts, :] \
         .sum('date')
     scale_factor = total_observed / total_inferred / p_observe
     return scale_factor
