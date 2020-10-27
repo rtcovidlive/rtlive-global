@@ -12,6 +12,7 @@ import pymc3
 
 from . import assumptions
 from . import data
+from . import export
 from . import model
 from . import plotting
 
@@ -211,3 +212,35 @@ class TestPlotting:
         assert isinstance(idata, arviz.InferenceData)
         fig, axs = plotting.plot_thumbnails(idata)
         pyplot.close()
+
+
+class TestExport:
+    def test_summarize_median_and_hdi(self):
+        numpy.random.seed(345234)
+        samples = xarray.DataArray(data=numpy.random.uniform(low=0.8, high=1.8, size=1000))
+
+        result = export.summarize_median_and_hdi(samples, prefix="blub")
+        numpy.testing.assert_allclose(result["blub"], numpy.median(samples))
+        numpy.testing.assert_allclose(result["blub_lower"], 0.85, atol=0.02)
+        numpy.testing.assert_allclose(result["blub_upper"], 1.75, atol=0.02)
+
+    def test_summarize_r_t(self):
+        numpy.random.seed(1234)
+        samples = xarray.DataArray(data=numpy.random.uniform(low=0.8, high=1.8, size=1000))
+        result = export.summarize_r_t(samples)
+        numpy.testing.assert_allclose(result["r_t_threshold_probability"], 0.8, atol=0.02)
+        numpy.testing.assert_allclose(result["r_t"], numpy.median(samples))
+        numpy.testing.assert_allclose(result["r_t_lower"], 0.83, atol=0.02)
+        numpy.testing.assert_allclose(result["r_t_upper"], 1.73, atol=0.02)
+
+    def test_summarize_infections(self):
+        numpy.random.seed(356435)
+        samples = xarray.DataArray(data=numpy.random.normal(200, 30, size=300_000))
+        result = export.summarize_infections(samples, population=200_000, hdi_prob=0.9545)
+        result
+        numpy.testing.assert_allclose(result["infections_by_100k"], 100, rtol=0.01)
+        numpy.testing.assert_allclose(result["infections_by_100k_lower"], 70, rtol=0.01)
+        numpy.testing.assert_allclose(result["infections_by_100k_upper"], 130, rtol=0.01)
+        numpy.testing.assert_allclose(result["infections_absolute"], 200, rtol=0.01)
+        numpy.testing.assert_allclose(result["infections_absolute_lower"], 140, rtol=0.01)
+        numpy.testing.assert_allclose(result["infections_absolute_upper"], 260, rtol=0.01)
