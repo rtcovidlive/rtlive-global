@@ -11,7 +11,7 @@ import theano.tensor.signal.conv
 import xarray
 
 
-__version__ = '1.0.2'
+__version__ = '1.1.0'
 _log = logging.getLogger(__file__)
 
 
@@ -24,7 +24,7 @@ def _reindex_observed(observed:pandas.DataFrame, buffer_days:int=10):
         end=observed.index[-1],
         freq="D",
     )
-    observed = observed.reindex(new_index, fill_value=0)
+    observed = observed.reindex(new_index, fill_value=numpy.nan)
     return observed
 
 
@@ -78,17 +78,37 @@ def build_model(
         the (created) PyMC3 model
     """
     observed = observed.rename(columns={test_col: "daily_tests"})
-    observed = _reindex_observed(observed.dropna(subset=['new_cases', 'daily_tests']), buffer_days)
+    # Reindex to make sure that there are no gaps.
+    # Also add (unobserved) buffer days at the beginning.
+    observed = _reindex_observed(observed, buffer_days)
 
-    len_observed = len(observed)
-    # precompute generation time interval vector to speed up tt.scan
-    convolution_ready_gt = _to_convolution_ready_gt(p_generation_time, len_observed)
+    # make boolean masks to filter for dates that have case data, testcount data or both
+    has_cases = ~numpy.isnan(observed.new_cases).values
+    has_testcounts = ~numpy.isnan(observed.daily_tests).values
+    has_data = has_cases & has_testcounts
+    # masks that can be used w.r.t. subsets of the dates.
+    # These are used to slice tensors that are already shorter than the full length.
+    has_data_wrt_cases = has_data[has_cases]
+    has_data_wrt_testcounts = has_data[has_testcounts]
 
-    nonzero_days = observed.daily_tests.gt(0)
     coords = {
+        # this is the full lenght of dates (without gaps) covered by the generative part of the model
         "date": observed.index.values,
-        "nonzero_date": observed.index.values[nonzero_days],
+        # these are subsets of dates where case/testcount data is available
+        "date_with_cases": observed.index.values[has_cases],
+        "date_with_testcounts": observed.index.values[has_testcounts],
+        # and the dates with both case & testcount data (for the likelihood)
+        "date_with_data": observed.index.values[has_data],
     }
+    N_dates = len(coords["date"])
+    N_with_cases = len(coords["date_with_cases"])
+    N_with_testcounts = len(coords["date_with_testcounts"])
+    N_with_data = len(coords["date_with_data"])
+    _log.info(
+        "The model describes %i days of which %i have case data and %i have testcount data. %i days have both.",
+        N_dates, N_with_cases, N_with_testcounts, N_with_data
+    )
+
     if not pmodel:
         pmodel = pymc3.Model(coords=coords)
 
@@ -102,21 +122,24 @@ def build_model(
         )
         r_t = pymc3.Deterministic("r_t", pymc3.math.exp(log_r_t), dims=["date"])
 
+        # Save data as part of trace so we can access in inference_data
         t_generation_time = pymc3.Data("p_generation_time", p_generation_time)
+        # precompute generation time interval vector to speed up tt.scan
+        convolution_ready_gt = _to_convolution_ready_gt(p_generation_time, N_dates)
         # For a given seed population and R_t curve, we calculate the
         # implied infection curve by simulating an outbreak. While this may
         # look daunting, it's simply a way to recreate the outbreak
         # simulation math inside the model:
         # https://staff.math.su.se/hoehle/blog/2020/04/15/effectiveR0.html
         seed = pymc3.Exponential("seed", 1 / 0.02)
-        y0 = tt.zeros(len_observed)
+        y0 = tt.zeros(N_dates)
         y0 = tt.set_subtensor(y0[0], seed)
         outputs, _ = theano.scan(
             fn=lambda t, gt, y, r_t: tt.set_subtensor(y[t], tt.sum(r_t * y * gt)),
-            sequences=[tt.arange(1, len_observed), convolution_ready_gt],
+            sequences=[tt.arange(1, N_dates), convolution_ready_gt],
             outputs_info=y0,
             non_sequences=r_t,
-            n_steps=len_observed - 1,
+            n_steps=N_dates - 1,
         )
         infections = pymc3.Deterministic("infections", outputs[-1], dims=["date"])
 
@@ -127,10 +150,10 @@ def build_model(
         test_adjusted_positive = pymc3.Deterministic(
             "test_adjusted_positive",
             theano.tensor.signal.conv.conv2d(
-                tt.reshape(infections, (1, len_observed)),
+                tt.reshape(infections, (1, N_dates)),
                 tt.reshape(t_p_delay, (1, len(p_delay))),
                 border_mode="full",
-            )[0, :len_observed],
+            )[0, :N_dates],
             dims=["date"]
         )
 
@@ -138,31 +161,31 @@ def build_model(
         # 0.1 * max_tests. The 0.1 only affects early values of Rt when
         # testing was minimal or when data errors cause underreporting
         # of tests.
-        tests = pymc3.Data("tests", observed.daily_tests.values, dims=["date"])
+        tests = pymc3.Data("tests", observed.daily_tests[has_testcounts], dims=["date_with_testcounts"])
         exposure = pymc3.Deterministic(
             "exposure",
             pymc3.math.clip(tests, observed.daily_tests.max() * 0.1, 1e9),
-            dims=["date"]
+            dims=["date_with_testcounts"]
         )
 
         # Test-volume adjust reported cases based on an assumed exposure
         # Note: this is similar to the exposure parameter in a Poisson
         # regression.
         positive = pymc3.Deterministic(
-            "positive", exposure * test_adjusted_positive,
-            dims=["date"]
+            "positive", exposure * test_adjusted_positive[has_testcounts],
+            dims=["date_with_testcounts"]
         )
+        positive_where_data = pymc3.Deterministic("positive_where_data", positive[has_data_wrt_testcounts], dims=["date_with_data"])
 
-        # Save data as part of trace so we can access in inference_data
-        observed_positive = pymc3.Data("observed_positive", observed.new_cases.values, dims=["date"])
-        nonzero_observed_positive = pymc3.Data("nonzero_observed_positive", observed.new_cases[nonzero_days.values].values, dims=["nonzero_date"])
+        observed_positive = pymc3.Data("observed_positive", observed.new_cases[has_cases], dims=["date_with_cases"])
+        observed_positive_where_data = pymc3.Data("observed_positive_where_data", observed.new_cases[has_cases][has_data_wrt_cases], dims=["date_with_data"])
 
-        positive_nonzero = pymc3.NegativeBinomial(
-            "nonzero_positive",
-            mu=positive[nonzero_days.values],
+        likelihood = pymc3.NegativeBinomial(
+            "likelihood",
+            mu=positive_where_data,
             alpha=pymc3.Gamma("alpha", mu=6, sigma=1),
-            observed=nonzero_observed_positive,
-            dims=["nonzero_date"]
+            observed=observed_positive_where_data,
+            dims=["date_with_data"]
         )
     return pmodel
 
@@ -206,7 +229,7 @@ def sample(pmodel:pymc3.Model, **kwargs):
 def get_scale_factor(idata: arviz.InferenceData) -> xarray.DataArray:
     """ Calculate a scaling factor so we can work/plot with
     the inferred "infections" curve.
-    
+
     The scaling factor depends on the probability that an infection is observed
     (sum of p_delay distribution). The current p_delay distribution sums to 0.9999999,
     so right now the scaling ASSUMES THAT THERE'S NO DARK FIGURE !!
@@ -222,15 +245,41 @@ def get_scale_factor(idata: arviz.InferenceData) -> xarray.DataArray:
     factor : xarray.DataArray
         scaling factors (sample,)
     """
-    p_observe = numpy.sum(idata.constant_data.p_delay)
-    total_observed = numpy.sum(idata.constant_data.observed_positive)
+    # coords changed with model v1.1.0. This ensure backwards-compatibility.
+    coord_tap = idata.posterior.test_adjusted_positive.coords.dims[-1]
+    coord_exposure = idata.constant_data.exposure.coords.dims[-1]
+    coord_observed_positive = idata.constant_data.observed_positive.coords.dims[-1]
 
-    # new method: normalizing using the integral of exposure-adjusted test_adjusted_positive
-    # - assumes that over time testing is not significantly steered towards high-risk individuals
-    exposure_profile = idata.constant_data.exposure / idata.constant_data.exposure.max()
-    total_inferred = (idata.posterior.test_adjusted_positive * exposure_profile) \
+    # the scaling factor is calculated from a comparison between
+    # (test_adjusted_positive * exposure) vs. sum(observed_positive)
+    # but only the dates where both case and test count are available must be considered
+
+    coord_date_with_data = tuple(idata.observed_data.coords.dims)[0]
+    date_with_data = set(tuple(idata.observed_data[coord_date_with_data].values))
+
+    mask_tap = [
+        d in date_with_data
+        for d in idata.posterior[coord_tap].values
+    ]
+    mask_exposure = [
+        d in date_with_data
+        for d in idata.posterior[coord_exposure].values
+    ]
+    mask_observed = [
+        d in date_with_data
+        for d in idata.constant_data[coord_observed_positive].values
+    ]
+
+    test_adjusted_positive = idata.posterior.test_adjusted_positive[:, :, mask_tap].rename({coord_tap: "date_with_data"})
+    exposure = idata.posterior.exposure[:, :, mask_exposure].rename({coord_exposure: "date_with_data"})
+    exposure_profile = exposure / idata.constant_data.exposure.max()
+
+    total_observed = idata.constant_data.observed_positive[mask_observed].sum(coord_observed_positive)
+    total_inferred = (test_adjusted_positive  * exposure_profile) \
         .stack(sample=('chain', 'draw')) \
-        .sum('date')
+        .sum('date_with_data')
+    p_observe = numpy.sum(idata.constant_data.p_delay)
+
     scale_factor = total_observed / total_inferred / p_observe
     return scale_factor
 
