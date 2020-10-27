@@ -49,7 +49,7 @@ def plot_vlines(
                 color="gray",
                 rotation=90,
                 horizontalalignment="center",
-                verticalalignment=alignment,                
+                verticalalignment=alignment,
             )
     return None
 
@@ -151,6 +151,7 @@ def plot_details(
     ]=None,
     locale_key: str=None,
     label_translations: typing.Dict[str, str]=None,
+    prediction_marker: typing.Optional[typing.Union[bool, typing.Tuple[datetime.datetime, str]]]=None,
     license: str=None,
 ):
     """ Creates a figure that shows the most important results of the model for a particular region.
@@ -183,6 +184,10 @@ def plot_details(
         for example "de_DE.UTF-8"
     label_translations : dict
         can be used to override labels in the plot (see code for the defaults)
+    prediction_marker: optional, bool or tuple
+        draws an extra marker in the curves subplot
+        if True, the "prediction_marker" from label_translations is placed at the last date with cases
+        pass a tuple of (datetime, label) for a custom marker. For example: `(datetime.today(), "today\n")`
     license : optional, str
         a license text to be included in the plot
 
@@ -197,6 +202,8 @@ def plot_details(
         locale.setlocale(locale.LC_TIME, locale_key)
     if label_translations is None:
         label_translations = {}
+    if not vlines:
+        vlines = {}
     label_translations = {
         "curves_ylabel": "per day",
         "testcounts_ylabel": "daily\ntests",
@@ -208,6 +215,7 @@ def plot_details(
         "bar_positive": "positive tests",
         "bar_actual_tests": "actual tests",
         "curve_predicted_tests": "predicted tests",
+        "prediction_marker": "\n\n↓ prediction",
         **label_translations
     }
 
@@ -364,6 +372,24 @@ def plot_details(
             horizontalalignment='right',
             verticalalignment='bottom',
             fontsize=8,
+        )
+    if prediction_marker:
+        # draw a labeled vline into the curves plot
+        # for annotation of "today", or "prediction ->"
+        if prediction_marker == True:
+            x = day_last_cases
+            label = label_translations["prediction_marker"]
+        else:
+            x, label = prediction_marker
+        ymin, ymax = ax_curves.get_ylim()
+        ax_curves.axvline(x, color="gray", linestyle=":")
+        ax_curves.text(
+            x, ymin+0.98*(ymax-ymin),
+            s=label,
+            color="gray",
+            rotation=90,
+            horizontalalignment="center",
+            verticalalignment="top",
         )
     if vlines:
         plot_vlines(ax_testcounts, {k:'' for k in vlines.keys()}, alignment='top')
