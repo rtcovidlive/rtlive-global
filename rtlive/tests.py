@@ -18,6 +18,7 @@ from . import plotting
 
 IDATA_FILENAMES = [
     "DE_2020-10-26_all_v1.0.2.nc",
+    "DE_2020-10-26_all_v1.1.0.nc",
 ]
 
 
