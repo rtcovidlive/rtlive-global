@@ -245,27 +245,41 @@ def get_scale_factor(idata: arviz.InferenceData) -> xarray.DataArray:
     factor : xarray.DataArray
         scaling factors (sample,)
     """
-    p_observe = numpy.sum(idata.constant_data.p_delay)
-    total_observed = numpy.sum(idata.constant_data.observed_positive)
-
     # coords changed with model v1.1.0. This ensure backwards-compatibility.
     coord_tap = idata.posterior.test_adjusted_positive.coords.dims[-1]
     coord_exposure = idata.constant_data.exposure.coords.dims[-1]
+    coord_observed_positive = idata.constant_data.observed_positive.coords.dims[-1]
 
-    # test_adjusted_positive covers the full range - exposure profile not
-    # so we need a mask to filter out dates for which the exposure is unknown
-    date_with_testcounts = set(tuple(idata.posterior[coord_tap].values))
-    has_testcounts = numpy.array([
-        d in date_with_testcounts
-        for d in idata.posterior.date.values
-    ])
+    # the scaling factor is calculated from a comparison between
+    # (test_adjusted_positive * exposure) vs. sum(observed_positive)
+    # but only the dates where both case and test count are available must be considered
 
-    # new method: normalizing using the integral of exposure-adjusted test_adjusted_positive
-    # - assumes that over time testing is not significantly steered towards high-risk individuals
-    exposure_profile = idata.constant_data.exposure / idata.constant_data.exposure.max()
-    total_inferred = idata.posterior.test_adjusted_positive \
-        .stack(sample=('chain', 'draw'))[has_testcounts, :] \
-        .sum('date')
+    coord_date_with_data = tuple(idata.observed_data.coords.dims)[0]
+    date_with_data = set(tuple(idata.observed_data[coord_date_with_data].values))
+
+    mask_tap = [
+        d in date_with_data
+        for d in idata.posterior[coord_tap].values
+    ]
+    mask_exposure = [
+        d in date_with_data
+        for d in idata.posterior[coord_exposure].values
+    ]
+    mask_observed = [
+        d in date_with_data
+        for d in idata.constant_data[coord_observed_positive].values
+    ]
+
+    test_adjusted_positive = idata.posterior.test_adjusted_positive[:, :, mask_tap].rename({coord_tap: "date_with_data"})
+    exposure = idata.posterior.exposure[:, :, mask_exposure].rename({coord_exposure: "date_with_data"})
+    exposure_profile = exposure / idata.constant_data.exposure.max()
+
+    total_observed = idata.constant_data.observed_positive[mask_observed].sum(coord_observed_positive)
+    total_inferred = (test_adjusted_positive  * exposure_profile) \
+        .stack(sample=('chain', 'draw')) \
+        .sum('date_with_data')
+    p_observe = numpy.sum(idata.constant_data.p_delay)
+
     scale_factor = total_observed / total_inferred / p_observe
     return scale_factor
 
