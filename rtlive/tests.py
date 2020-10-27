@@ -210,7 +210,7 @@ class TestPlotting:
         fp = pathlib.Path(pathlib.Path(__file__).parent, "testdata", filename)
         idata = arviz.from_netcdf(str(fp))
         assert isinstance(idata, arviz.InferenceData)
-        fig, axs = plotting.plot_thumbnails(idata)
+        fig, axs = plotting.plot_thumbnail(idata)
         pyplot.close()
 
 

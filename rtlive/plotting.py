@@ -318,8 +318,9 @@ def plot_details(
     ax_testcounts.set_ylabel(label_translations["testcounts_ylabel"], fontsize=12)
 
     # ============================================ probabilities
+    r_t_samples = idata.posterior.r_t.sel({ "date" : slice(day_3, day_last_cases) })
     ax_probability.plot(
-        idata.posterior.date, (idata.posterior.r_t > 1).mean(dim=("chain", "draw"))
+        r_t_samples.date, (r_t_samples > 1).mean(dim=("chain", "draw"))
     )
     ax_probability.set_ylim(0, 1)
     ax_probability.set_ylabel(label_translations["probability_ylabel"], fontsize=12)
@@ -327,8 +328,8 @@ def plot_details(
     # ============================================ R_t
     pymc3.gp.util.plot_gp_dist(
         ax=ax_rt,
-        x=idata.posterior.date.values,
-        samples=idata.posterior.r_t.stack(sample=("chain", "draw")).T.values,
+        x=r_t_samples.date.values,
+        samples=r_t_samples.stack(sample=("chain", "draw")).T.values,
         samples_alpha=0,
     )
     ax_rt.axhline(1, linestyle=":")
@@ -401,15 +402,21 @@ def plot_details(
     return fig, axs
 
 
-def plot_thumbnails(idata, *, locale_key=None, license=True):
+def plot_thumbnail(idata, *, locale_key=None, license=True):
     if locale_key:
         locale.setlocale(locale.LC_TIME, locale_key)
     fig, ax = pyplot.subplots(dpi=120, figsize=(6, 4))
 
+    date = tuple(idata.posterior["r_t"].coords.values())[-1].values
+    date_with_cases = tuple(idata.constant_data["observed_positive"].coords.values())[-1].values
+    day_from = date[3]
+    day_to = date_with_cases[-1]
+
+    samples = idata.posterior.r_t.sel({ "date" : slice(day_from, day_to) })
     pymc3.gp.util.plot_gp_dist(
         ax=ax,
-        x=idata.posterior.date.values,
-        samples=idata.posterior.r_t.stack(sample=("chain", "draw")).T.values,
+        x=samples.date.values,
+        samples=samples.stack(sample=("chain", "draw")).T.values,
         samples_alpha=0,
     )
     ax.axhline(1, linestyle=":")
@@ -422,7 +429,8 @@ def plot_thumbnails(idata, *, locale_key=None, license=True):
     ax.xaxis.set_tick_params(rotation=0, labelsize=16)
     ax.yaxis.set_tick_params(labelsize=16)
     ax.set_ylim(0, 2.5)
-    ax.set_xlim(idata.posterior.date[0], datetime.datetime.today())
+    # use x-limits to fit the density plot nicely
+    ax.set_xlim(day_from, day_to)
 
     # embed license notice directly in the plot
     if license:
