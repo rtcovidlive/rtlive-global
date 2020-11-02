@@ -50,8 +50,10 @@ class TestData:
                 )
             return df, results
 
+        # mock with Antarctica
+        # (Soviet Union or German Democratic Republic are not supported by ISO-3166 package)
         data.set_country_support(
-            country_alpha2="DE",
+            country_alpha2="AQ",
             compute_zone=data.Zone.Europe,
             region_name={
                 "all": "Test country",
@@ -62,9 +64,9 @@ class TestData:
             fn_load=test_load,
             fn_process=test_process,
         )
-        assert "DE" in data.SUPPORTED_COUNTRIES
-        df = data.get_data("DE", datetime.datetime.today())
-        df, forecasts = data.process_testcounts("DE", df)
+        assert "AQ" in data.SUPPORTED_COUNTRIES
+        df = data.get_data("AQ", datetime.datetime.today())
+        df, forecasts = data.process_testcounts("AQ", df)
         assert isinstance(df, pandas.DataFrame)
         assert isinstance(forecasts, dict)
 
