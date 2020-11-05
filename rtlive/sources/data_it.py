@@ -75,6 +75,25 @@ LABEL_TRANSLATIONS = {
 IT_REGIONS = list(IT_REGION_NAMES.keys())
 
 
+def get_data_IT(run_date) -> pandas.DataFrame:
+    if run_date.date() > datetime.date.today():
+        raise ValueError("Run date is in the future. Nice try.")
+    if run_date.date() < datetime.date.today():
+        # TODO: implement downloading of historic data
+        raise NotImplementedError(
+            "Downloading with a run_date is not yet supported. "
+            f"Today: {datetime.date.today()}, run_date: {run_date}"
+        )
+
+    today_obj = datetime.strptime(run_date, '%Y-%m-%d')
+    today = today_obj.strftime('%Y%m%d')
+
+    content = requests.get(
+        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-json/dpc-covid19-ita-regioni.json",
+        verify=False,
+    ).content
+    
+
 def forecast_IT(df: pandas.DataFrame):
     """ Applies testcount interpolation/extrapolation.
 
