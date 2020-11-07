@@ -5,7 +5,7 @@ using the model that was developed for https://rt.live.
 While the implementation of the model is completely country-independent, the code has a high-level interface that allows
 for easy plug-in support of new countries.
 
-<!-- __Because this code is running *in production*, the maintainers of this repository are *very* conservative about merging any PRs.__ -->
+The [rt.live](https://rt.live) site itself (for the United States) runs the model hosted at [rtcovidlive/covid-model](https://github.com/rtcovidlive/covid-model), on which this further work was based. Other sites like [rtlive.de](https://rtlive.de) run the code in this repository.
 
 ## Where to find...
 + [Explanation of the model](notebooks/Tutorial_model.ipynb)
