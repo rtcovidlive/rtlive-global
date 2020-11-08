@@ -166,6 +166,7 @@ def _insert_future(df_raw: pandas.DataFrame, *, future_days: int):
     df : pandas.DataFrame
         a new DataFrame that has rows of NaN for the new dates
     """
+    _log.info("Inserting %i future_days.", future_days)
     dfs_with_future = []
     regions = df_raw.reset_index().region.unique()
     for region in regions:
