@@ -1,5 +1,9 @@
+import io
 import logging
 import pandas
+import requests
+
+from datetime import datetime, timedelta
 
 from . import ourworldindata
 from .. import preprocessing
@@ -13,7 +17,7 @@ IT_REGION_NAMES = {
     '5': 'Veneto',
     '6': 'Friuli Venezia Giulia',
     '7': 'Liguria',
-    '8': 'Emilia-Romagna,
+    '8': 'Emilia-Romagna',
     '9': 'Toscana',
     '10': 'Umbria',
     '11': 'Marche',
@@ -84,30 +88,114 @@ def get_data_IT(run_date) -> pandas.DataFrame:
             "Downloading with a run_date is not yet supported. "
             f"Today: {datetime.date.today()}, run_date: {run_date}"
         )
+    data = get_regions_data(run_date)
+    global_data = get_global_data(run_date)
+    data = data.append(global_data, ignore_index=True)
+    return data
 
+def get_global_data(run_date) -> pandas.DataFrame:
     today_obj = datetime.strptime(run_date, '%Y-%m-%d')
     today = today_obj.strftime('%Y%m%d')
 
     content = requests.get(
-        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-json/dpc-covid19-ita-regioni.json",
-        verify=False,
+        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-andamento-nazionale/dpc-covid19-ita-andamento-nazionale-" + str(today) + ".csv",
     ).content
+    today_data = pandas.read_csv(
+        io.StringIO(content.decode("utf-8")),
+        sep=",",
+        parse_dates=["data"],
+        usecols=["data", "nuovi_positivi", "tamponi"],
+    ).rename(
+        columns={
+            "data": "date",
+            "nuovi_positivi": "new_cases",
+            "tamponi": "new_tests",
+        }
+    )
+
+    yesterday_obj = today_obj - timedelta(days=1)
+    yesterday = yesterday_obj.strftime('%Y%m%d')
+    content = requests.get(
+        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-andamento-nazionale/dpc-covid19-ita-andamento-nazionale-" + str(yesterday) + ".csv",
+    ).content
+    yesterday_data = pandas.read_csv(
+        io.StringIO(content.decode("utf-8")),
+        sep=",",
+        parse_dates=["data"],
+        usecols=["data", "nuovi_positivi", "tamponi"],
+    ).rename(
+        columns={
+            "data": "date",
+            "nuovi_positivi": "new_cases",
+            "tamponi": "new_tests",
+        }
+    )
+
+    current_tests = today_data.loc[0, 'new_tests'] - yesterday_data.loc[0, 'new_tests']
+    today_data.loc[0, 'new_tests'] = current_tests
+    today_data['region'] = ['all']
+    return today_data
+
+def get_regions_data(run_date) -> pandas.DataFrame:
+    today_obj = datetime.strptime(run_date, '%Y-%m-%d')
+    today = today_obj.strftime('%Y%m%d')
+
+    content = requests.get(
+        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni-" + str(today) + ".csv",
+    ).content
+    today_data = pandas.read_csv(
+        io.StringIO(content.decode("utf-8")),
+        sep=",",
+        dtype={"codice_regione": str},
+        parse_dates=["data"],
+        usecols=["codice_regione", "data", "nuovi_positivi", "tamponi"],
+    ).rename(
+        columns={
+            "codice_regione": "region",
+            "data": "date",
+            "nuovi_positivi": "new_cases",
+            "tamponi": "new_tests",
+        }
+    )
+    today_data.set_index(["region", "date"]).sort_index()
+
+    yesterday_obj = today_obj - timedelta(days=1)
+    yesterday = yesterday_obj.strftime('%Y%m%d')
+    content = requests.get(
+        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni-" + str(yesterday) + ".csv",
+    ).content
+    yesterday_data = pandas.read_csv(
+        io.StringIO(content.decode("utf-8")),
+        sep=",",
+        dtype={"codice_regione": str},
+        parse_dates=["data"],
+        usecols=["codice_regione", "data", "nuovi_positivi", "tamponi"],
+    ).rename(
+        columns={
+            "codice_regione": "region",
+            "data": "date",
+            "nuovi_positivi": "new_cases",
+            "tamponi": "new_tests",
+        }
+    )
+    yesterday_data.set_index(["region", "date"]).sort_index()
+
+    for row in yesterday_data.itertuples():
+        current = today_data[today_data['region'].isin([row.region])]
+        current_tests = current['new_tests'] - row.new_tests
+        today_data.loc[current.index, 'new_tests'] = current_tests
+    
+    return today_data
     
 
 def forecast_IT(df: pandas.DataFrame):
-    """ Applies testcount interpolation/extrapolation.
+    """ Applies testcount interpolation/extrapolation to french data.
 
     Currently this assumes the OWID data, which only has an "all" region.
     In the future, this should be replaced with more fine graned data loading!
     """
     # forecast with existing data
     df['predicted_new_tests'], results = preprocessing.predict_testcounts_all_regions(df, 'IT')
-    # interpolate the initial testing ramp-up to account for missing data
-    df_region = df.xs('all')
-    df_region.loc['2020-01-01', 'predicted_new_tests'] = 0
-    df_region.predicted_new_tests = df_region.predicted_new_tests.interpolate('linear')
-    df_region['region'] = 'all'
-    df = df_region.reset_index().set_index(['region', 'date'])    
     return df, results
 
 
@@ -117,6 +205,6 @@ data.set_country_support(
     compute_zone=data.Zone.Europe,
     region_name=IT_REGION_NAMES,
     region_population=IT_REGION_POPULATION,
-    fn_load=ourworldindata.create_loader_function("IT"),
+    fn_load=get_data_IT,
     fn_process=forecast_IT,
 )
