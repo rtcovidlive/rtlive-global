@@ -158,7 +158,7 @@ def process_covidtracking_data(df_raw: pd.DataFrame):
     forecasting_results = {
     }
     # calculate the sum over all states ... again
-    df_all = df_corrected.sum(level='date')
+    df_all = df_corrected.sum(level='date', min_count=40)
     df_all.insert(0, column='region', value='all')
     df_all = df_all.reset_index().set_index(['region', 'date'])
     df_merged = pd.concat([df_corrected.drop(["all"]), df_all]).sort_index()
@@ -231,7 +231,7 @@ US_REGION_POPULATION = {
     code : pop
     for code, (_, pop) in US_NAME_POPULATION.items()
 }
-US_REGION_NAMES["all"] = "United States"
+US_REGION_NAMES["all"] = "United States of America"
 US_REGION_POPULATION["all"] = sum(US_REGION_POPULATION.values())
 
 

@@ -35,6 +35,7 @@ class SupportedCountry:
     alpha2: str
     compute_zone: Zone
     region_name: typing.Dict[str, str]
+    region_short_name: typing.Dict[str, str]
     region_population: typing.Dict[str, int]
     fn_load: LoadFunction
     fn_process: ProcessFunction
@@ -48,6 +49,7 @@ def set_country_support(
     *,
     compute_zone: Zone,
     region_name: typing.Dict[str, str],
+    region_short_name: typing.Optional[typing.Dict[str, str]]=None,
     region_population: typing.Dict[str, int],
     fn_load: LoadFunction,
     fn_process: ProcessFunction,
@@ -63,6 +65,9 @@ def set_country_support(
     region_name : dict
         dictionary of { region_code : str }
         to map machine-readable region codes to human-readable names
+    region_short_name : optional, dict
+        dictionary of { region_code : str }
+        to map machine-readable region codes to short human-readable names (falls back to [region_name])
     region_population : dict
         dictionary of { region_code : int }
         to map machine-readable region codes to number of inhabitants
@@ -81,11 +86,15 @@ def set_country_support(
     """
     if country_alpha2 not in iso3166.countries_by_alpha2:
         raise KeyError(f"Unknown ISO-3166 alpha 2 country code '{country_alpha2}'.")
+    if not region_short_name:
+        # default to region codes
+        region_short_name = { rc : rc for rc in region_name }
     # register loading functions
     SUPPORTED_COUNTRIES[country_alpha2] = SupportedCountry(
         country_alpha2,
         compute_zone,
         region_name,
+        region_short_name,
         region_population,
         fn_load,
         fn_process,
@@ -157,6 +166,7 @@ def _insert_future(df_raw: pandas.DataFrame, *, future_days: int):
     df : pandas.DataFrame
         a new DataFrame that has rows of NaN for the new dates
     """
+    _log.info("Inserting %i future_days.", future_days)
     dfs_with_future = []
     regions = df_raw.reset_index().region.unique()
     for region in regions:
