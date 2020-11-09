@@ -1,9 +1,8 @@
+import datetime
 import io
 import logging
 import pandas
 import requests
-
-from datetime import datetime, timedelta
 
 from .. import preprocessing
 
@@ -14,14 +13,14 @@ IT_DATA_NATION_FILENAME = "/dati-andamento-nazionale/dpc-covid19-ita-andamento-n
 IT_DATA_REGION_FILENAME = "/dati-regioni/dpc-covid19-ita-regioni-%s.csv"
 
 IT_REGION_NAMES = {
-    '1': 'Piemonte',
-    '2': 'Valle d\'Aosta',
-    '3': 'Lombardia',
-    '5': 'Veneto',
-    '6': 'Friuli Venezia Giulia',
-    '7': 'Liguria',
-    '8': 'Emilia-Romagna',
-    '9': 'Toscana',
+    '01': 'Piemonte',
+    '02': 'Valle d\'Aosta',
+    '03': 'Lombardia',
+    '05': 'Veneto',
+    '06': 'Friuli Venezia Giulia',
+    '07': 'Liguria',
+    '08': 'Emilia-Romagna',
+    '09': 'Toscana',
     '10': 'Umbria',
     '11': 'Marche',
     '12': 'Lazio',
@@ -39,14 +38,14 @@ IT_REGION_NAMES = {
 }
 
 IT_REGION_ABBR = {
-    '1': 'PIE',
-    '2': 'VAL',
-    '3': 'LOM',
-    '5': 'VEN',
-    '6': 'FRI',
-    '7': 'LIG',
-    '8': 'EMI',
-    '9': 'TOS',
+    '01': 'PIE',
+    '02': 'VAL',
+    '03': 'LOM',
+    '05': 'VEN',
+    '06': 'FRI',
+    '07': 'LIG',
+    '08': 'EMI',
+    '09': 'TOS',
     '10': 'UMB',
     '11': 'MAR',
     '12': 'LAZ',
@@ -70,14 +69,14 @@ IT_REGION_CODES = {
 
 IT_REGION_POPULATION = {
     'all': 60_244_639,
-    '1': 4_341_375,
-    '2': 125_501,
-    '3': 10_103_969,
-    '5': 4_907_704,
-    '6': 1_211_357,
-    '7': 1_543_127,
-    '8': 4_467_118,
-    '9': 3_722_729,
+    '01': 4_341_375,
+    '02': 125_501,
+    '03': 10_103_969,
+    '05': 4_907_704,
+    '06': 1_211_357,
+    '07': 1_543_127,
+    '08': 4_467_118,
+    '09': 3_722_729,
     '10': 880_285,
     '11': 1_518_400,
     '12': 5_865_544,
@@ -132,7 +131,8 @@ def get_data_IT(run_date) -> pandas.DataFrame:
     data = get_regions_data(run_date)
     global_data = get_global_data(run_date)
     data = data.append(global_data, ignore_index=True)
-    return data
+    return data.set_index(["region", "date"])
+
 
 def get_global_data(run_date) -> pandas.DataFrame:
     """
@@ -149,7 +149,7 @@ def get_global_data(run_date) -> pandas.DataFrame:
     df : pandas.DataFrame
         table with columns as required by rtlive/data.py API
     """
-    today_obj = datetime.strptime(run_date, '%Y-%m-%d')
+    today_obj = run_date
     today = today_obj.strftime('%Y%m%d')
 
     content = requests.get(
@@ -168,7 +168,7 @@ def get_global_data(run_date) -> pandas.DataFrame:
         }
     )
 
-    yesterday_obj = today_obj - timedelta(days=1)
+    yesterday_obj = today_obj - datetime.timedelta(days=1)
     yesterday = yesterday_obj.strftime('%Y%m%d')
     content = requests.get(
         IT_DATA_BASE_PATH + (IT_DATA_NATION_FILENAME % yesterday),
@@ -191,6 +191,7 @@ def get_global_data(run_date) -> pandas.DataFrame:
     today_data['region'] = ['all']
     return today_data
 
+
 def get_regions_data(run_date) -> pandas.DataFrame:
     """
     Retrieve daily (run_date) regions CSV and substract today's tests from yesterday's tests
@@ -206,7 +207,7 @@ def get_regions_data(run_date) -> pandas.DataFrame:
     df : pandas.DataFrame
         table with columns as required by rtlive/data.py API
     """
-    today_obj = datetime.strptime(run_date, '%Y-%m-%d')
+    today_obj = run_date
     today = today_obj.strftime('%Y%m%d')
 
     content = requests.get(
@@ -228,7 +229,7 @@ def get_regions_data(run_date) -> pandas.DataFrame:
     )
     today_data.set_index(["region", "date"]).sort_index()
 
-    yesterday_obj = today_obj - timedelta(days=1)
+    yesterday_obj = today_obj - datetime.timedelta(days=1)
     yesterday = yesterday_obj.strftime('%Y%m%d')
     content = requests.get(
         IT_DATA_BASE_PATH + (IT_DATA_REGION_FILENAME % yesterday),
