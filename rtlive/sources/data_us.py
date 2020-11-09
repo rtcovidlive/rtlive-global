@@ -231,7 +231,7 @@ US_REGION_POPULATION = {
     code : pop
     for code, (_, pop) in US_NAME_POPULATION.items()
 }
-US_REGION_NAMES["all"] = "United States"
+US_REGION_NAMES["all"] = "United States of America"
 US_REGION_POPULATION["all"] = sum(US_REGION_POPULATION.values())
 
 
