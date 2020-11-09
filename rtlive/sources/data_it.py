@@ -5,10 +5,13 @@ import requests
 
 from datetime import datetime, timedelta
 
-from . import ourworldindata
 from .. import preprocessing
 
 _log = logging.getLogger(__file__)
+
+IT_DATA_BASE_PATH = "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master"
+IT_DATA_NATION_FILENAME = "/dati-andamento-nazionale/dpc-covid19-ita-andamento-nazionale-%s.csv"
+IT_DATA_REGION_FILENAME = "/dati-regioni/dpc-covid19-ita-regioni-%s.csv"
 
 IT_REGION_NAMES = {
     '1': 'Piemonte',
@@ -33,6 +36,31 @@ IT_REGION_NAMES = {
     '21': 'P.A. Bolzano',
     '22': 'P.A. Trento',
     'all': 'Italy',
+}
+
+IT_REGION_ABBR = {
+    '1': 'PIE',
+    '2': 'VAL',
+    '3': 'LOM',
+    '5': 'VEN',
+    '6': 'FRI',
+    '7': 'LIG',
+    '8': 'EMI',
+    '9': 'TOS',
+    '10': 'UMB',
+    '11': 'MAR',
+    '12': 'LAZ',
+    '13': 'ABR',
+    '14': 'MOL',
+    '15': 'CAM',
+    '16': 'PUG',
+    '17': 'BAS',
+    '18': 'CAL',
+    '19': 'SIC',
+    '20': 'SAR',
+    '21': 'PBZ',
+    '22': 'PTN',
+    'all': 'ITA',
 }
 
 IT_REGION_CODES = {
@@ -80,6 +108,19 @@ IT_REGIONS = list(IT_REGION_NAMES.keys())
 
 
 def get_data_IT(run_date) -> pandas.DataFrame:
+    """
+    Retrieve daily (run_date) regions and append national data (key 'all') to it
+
+    Parameters
+    ----------
+    run_date : pandas.Timestamp
+        date for which the data shall be downloaded
+    
+    Returns
+    -------
+    df : pandas.DataFrame
+        table with columns as required by rtlive/data.py API
+    """
     if run_date.date() > datetime.date.today():
         raise ValueError("Run date is in the future. Nice try.")
     if run_date.date() < datetime.date.today():
@@ -94,11 +135,25 @@ def get_data_IT(run_date) -> pandas.DataFrame:
     return data
 
 def get_global_data(run_date) -> pandas.DataFrame:
+    """
+    Retrieve daily (run_date) global CSV and substract today's tests from yesterday's tests
+    Italian data do not have daily number of tests done
+
+    Parameters
+    ----------
+    run_date : pandas.Timestamp
+        date for which the data shall be downloaded
+    
+    Returns
+    -------
+    df : pandas.DataFrame
+        table with columns as required by rtlive/data.py API
+    """
     today_obj = datetime.strptime(run_date, '%Y-%m-%d')
     today = today_obj.strftime('%Y%m%d')
 
     content = requests.get(
-        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-andamento-nazionale/dpc-covid19-ita-andamento-nazionale-" + str(today) + ".csv",
+        IT_DATA_BASE_PATH + (IT_DATA_NATION_FILENAME % today),
     ).content
     today_data = pandas.read_csv(
         io.StringIO(content.decode("utf-8")),
@@ -116,7 +171,7 @@ def get_global_data(run_date) -> pandas.DataFrame:
     yesterday_obj = today_obj - timedelta(days=1)
     yesterday = yesterday_obj.strftime('%Y%m%d')
     content = requests.get(
-        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-andamento-nazionale/dpc-covid19-ita-andamento-nazionale-" + str(yesterday) + ".csv",
+        IT_DATA_BASE_PATH + (IT_DATA_NATION_FILENAME % yesterday),
     ).content
     yesterday_data = pandas.read_csv(
         io.StringIO(content.decode("utf-8")),
@@ -137,11 +192,25 @@ def get_global_data(run_date) -> pandas.DataFrame:
     return today_data
 
 def get_regions_data(run_date) -> pandas.DataFrame:
+    """
+    Retrieve daily (run_date) regions CSV and substract today's tests from yesterday's tests
+    Italian data do not have daily number of tests done
+
+    Parameters
+    ----------
+    run_date : pandas.Timestamp
+        date for which the data shall be downloaded
+    
+    Returns
+    -------
+    df : pandas.DataFrame
+        table with columns as required by rtlive/data.py API
+    """
     today_obj = datetime.strptime(run_date, '%Y-%m-%d')
     today = today_obj.strftime('%Y%m%d')
 
     content = requests.get(
-        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni-" + str(today) + ".csv",
+        IT_DATA_BASE_PATH + (IT_DATA_REGION_FILENAME % today),
     ).content
     today_data = pandas.read_csv(
         io.StringIO(content.decode("utf-8")),
@@ -162,7 +231,7 @@ def get_regions_data(run_date) -> pandas.DataFrame:
     yesterday_obj = today_obj - timedelta(days=1)
     yesterday = yesterday_obj.strftime('%Y%m%d')
     content = requests.get(
-        "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master/dati-regioni/dpc-covid19-ita-regioni-" + str(yesterday) + ".csv",
+        IT_DATA_BASE_PATH + (IT_DATA_REGION_FILENAME % yesterday),
     ).content
     yesterday_data = pandas.read_csv(
         io.StringIO(content.decode("utf-8")),
@@ -189,7 +258,7 @@ def get_regions_data(run_date) -> pandas.DataFrame:
     
 
 def forecast_IT(df: pandas.DataFrame):
-    """ Applies testcount interpolation/extrapolation to french data.
+    """ Applies testcount interpolation/extrapolation to italian data.
 
     Currently this assumes the OWID data, which only has an "all" region.
     In the future, this should be replaced with more fine graned data loading!
@@ -204,6 +273,7 @@ data.set_country_support(
     country_alpha2="IT",
     compute_zone=data.Zone.Europe,
     region_name=IT_REGION_NAMES,
+    region_short_name=IT_REGION_ABBR,
     region_population=IT_REGION_POPULATION,
     fn_load=get_data_IT,
     fn_process=forecast_IT,
