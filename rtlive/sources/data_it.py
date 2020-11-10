@@ -9,8 +9,8 @@ from .. import preprocessing
 _log = logging.getLogger(__file__)
 
 IT_DATA_BASE_PATH = "https://raw.githubusercontent.com/pcm-dpc/COVID-19/master"
-IT_DATA_NATION_FILENAME = "/dati-andamento-nazionale/dpc-covid19-ita-andamento-nazionale-%s.csv"
-IT_DATA_REGION_FILENAME = "/dati-regioni/dpc-covid19-ita-regioni-%s.csv"
+IT_DATA_NATION_FILENAME = "/dati-andamento-nazionale/dpc-covid19-ita-andamento-nazionale.csv"
+IT_DATA_REGION_FILENAME = "/dati-regioni/dpc-covid19-ita-regioni.csv"
 
 IT_REGION_NAMES = {
     '01': 'Piemonte',
@@ -129,12 +129,14 @@ def get_data_IT(run_date) -> pandas.DataFrame:
             f"Today: {datetime.date.today()}, run_date: {run_date}"
         )
     data = get_regions_data(run_date)
-    global_data = get_global_data(run_date)
+    global_data = get_nation_data(run_date)
     data = data.append(global_data, ignore_index=True)
-    return data.set_index(["region", "date"])
+    data = data.reset_index()
+    data = (data.set_index(["region", "date"]).sort_index())
+    return data
 
 
-def get_global_data(run_date) -> pandas.DataFrame:
+def get_nation_data(run_date) -> pandas.DataFrame:
     """
     Retrieve daily (run_date) global CSV and substract today's tests from yesterday's tests
     Italian data do not have daily number of tests done
@@ -149,13 +151,10 @@ def get_global_data(run_date) -> pandas.DataFrame:
     df : pandas.DataFrame
         table with columns as required by rtlive/data.py API
     """
-    today_obj = run_date
-    today = today_obj.strftime('%Y%m%d')
-
     content = requests.get(
-        IT_DATA_BASE_PATH + (IT_DATA_NATION_FILENAME % today),
+        IT_DATA_BASE_PATH + IT_DATA_NATION_FILENAME,
     ).content
-    today_data = pandas.read_csv(
+    data = pandas.read_csv(
         io.StringIO(content.decode("utf-8")),
         sep=",",
         parse_dates=["data"],
@@ -164,32 +163,24 @@ def get_global_data(run_date) -> pandas.DataFrame:
         columns={
             "data": "date",
             "nuovi_positivi": "new_cases",
-            "tamponi": "new_tests",
+            "tamponi": "tests",
         }
     )
-
-    yesterday_obj = today_obj - datetime.timedelta(days=1)
-    yesterday = yesterday_obj.strftime('%Y%m%d')
-    content = requests.get(
-        IT_DATA_BASE_PATH + (IT_DATA_NATION_FILENAME % yesterday),
-    ).content
-    yesterday_data = pandas.read_csv(
-        io.StringIO(content.decode("utf-8")),
-        sep=",",
-        parse_dates=["data"],
-        usecols=["data", "nuovi_positivi", "tamponi"],
-    ).rename(
-        columns={
-            "data": "date",
-            "nuovi_positivi": "new_cases",
-            "tamponi": "new_tests",
-        }
-    )
-
-    current_tests = today_data.loc[0, 'new_tests'] - yesterday_data.loc[0, 'new_tests']
-    today_data.loc[0, 'new_tests'] = current_tests
-    today_data['region'] = ['all']
-    return today_data
+    data['date'] = data['date'].dt.date
+    data['new_tests'] = float("NaN")
+    data['region'] = 'all'
+    data.set_index(["region", "date"]).sort_index()
+    for row in data.itertuples():
+        yesterday_obj = row.date - datetime.timedelta(days=1)
+        previous_data = data.loc[(data['date'] == yesterday_obj)]
+        if not previous_data.empty:
+            previous_tests = float(previous_data.get('tests'))
+            if data.loc[row.Index,'tests'] > previous_tests:
+                data.loc[row.Index, 'new_tests'] = data.loc[row.Index,'tests'] - previous_tests
+        if row.new_cases <= 0:
+            data.loc[row.Index, 'new_cases'] = float("NaN")
+    del data['tests']
+    return data
 
 
 def get_regions_data(run_date) -> pandas.DataFrame:
@@ -207,13 +198,10 @@ def get_regions_data(run_date) -> pandas.DataFrame:
     df : pandas.DataFrame
         table with columns as required by rtlive/data.py API
     """
-    today_obj = run_date
-    today = today_obj.strftime('%Y%m%d')
-
     content = requests.get(
-        IT_DATA_BASE_PATH + (IT_DATA_REGION_FILENAME % today),
+        IT_DATA_BASE_PATH + IT_DATA_REGION_FILENAME,
     ).content
-    today_data = pandas.read_csv(
+    data = pandas.read_csv(
         io.StringIO(content.decode("utf-8")),
         sep=",",
         dtype={"codice_regione": str},
@@ -224,38 +212,23 @@ def get_regions_data(run_date) -> pandas.DataFrame:
             "codice_regione": "region",
             "data": "date",
             "nuovi_positivi": "new_cases",
-            "tamponi": "new_tests",
+            "tamponi": "tests",
         }
     )
-    today_data.set_index(["region", "date"]).sort_index()
-
-    yesterday_obj = today_obj - datetime.timedelta(days=1)
-    yesterday = yesterday_obj.strftime('%Y%m%d')
-    content = requests.get(
-        IT_DATA_BASE_PATH + (IT_DATA_REGION_FILENAME % yesterday),
-    ).content
-    yesterday_data = pandas.read_csv(
-        io.StringIO(content.decode("utf-8")),
-        sep=",",
-        dtype={"codice_regione": str},
-        parse_dates=["data"],
-        usecols=["codice_regione", "data", "nuovi_positivi", "tamponi"],
-    ).rename(
-        columns={
-            "codice_regione": "region",
-            "data": "date",
-            "nuovi_positivi": "new_cases",
-            "tamponi": "new_tests",
-        }
-    )
-    yesterday_data.set_index(["region", "date"]).sort_index()
-
-    for row in yesterday_data.itertuples():
-        current = today_data[today_data['region'].isin([row.region])]
-        current_tests = current['new_tests'] - row.new_tests
-        today_data.loc[current.index, 'new_tests'] = current_tests
-    
-    return today_data
+    data['date'] = data['date'].dt.date
+    data['new_tests'] = float("NaN")
+    data.set_index(["region", "date"]).sort_index()
+    for row in data.itertuples():
+        yesterday_obj = row.date - datetime.timedelta(days=1)
+        previous_data = data.loc[(data['region'] == row.region) & (data['date'] == yesterday_obj)]
+        if not previous_data.empty:
+            previous_tests = float(previous_data.get('tests'))
+            if data.loc[row.Index,'tests'] > previous_tests:
+                data.loc[row.Index, 'new_tests'] = data.loc[row.Index,'tests'] - previous_tests
+        if row.new_cases <= 0:
+            data.loc[row.Index, 'new_cases'] = float("NaN")
+    del data['tests']
+    return data
     
 
 def forecast_IT(df: pandas.DataFrame):
