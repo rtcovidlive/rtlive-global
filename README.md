@@ -35,7 +35,7 @@ Furthermore, we welcome contributions regarding...
 + model insight
 
 ### How to run the code and notebooks
-To be able to contribute, you'll need to be able to run the code and notebooks on this repo. To that end, we strongly recommend [installing the  Anaconda distribution](https://www.anaconda.com/products/individual) for python. This will make sure all the packages and necessary compilers come from the same source, and it will allow you to create dedicated virtual environments to run your code safely for each project independently.
+To be able to contribute, you'll need to be able to run the code and notebooks on this repo. To that end, we strongly recommend [installing the  miniconda distribution](https://docs.conda.io/en/latest/miniconda.html) for python. This will make sure all the packages and necessary compilers come from the same source, and it will allow you to create dedicated virtual environments to run your code safely for each project independently.
 
 Once Anaconda is installed, use the terminal and make sure you're in the root of the rtlive-global repository. Then, follow the following steps (still in the terminal):
 
