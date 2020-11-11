@@ -59,7 +59,7 @@ IT_REGION_ABBR = {
     '20': 'SAR',
     '21': 'PBZ',
     '22': 'PTN',
-    'all': 'ITA',
+    'all': 'all',
 }
 
 IT_REGION_CODES = {
