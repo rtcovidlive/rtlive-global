@@ -125,7 +125,7 @@ def get_data(country: str, run_date: pandas.Timestamp) -> pandas.DataFrame:
     scountry = SUPPORTED_COUNTRIES[country]
     result = scountry.fn_load(run_date)
     assert isinstance(result, pandas.DataFrame)
-    assert result.index.names == ("region", "date")
+    assert result.index.names == ("region", "date"), f"Index names were: {result.index.names}"
     missing_names = set(result.reset_index().region) - set(scountry.region_name.keys())
     missing_pop = set(result.reset_index().region) - set(
         scountry.region_population.keys()
