@@ -43,7 +43,7 @@ Once miniconda is installed, use the terminal and make sure you're in the root o
 - Activate the new environment: `conda activate rtlive`
 - Verify that the new environment was installed correctly: `conda env list`
 - If you want to run the notebooks, you have to tell Jupyter about this new environment. Still on the terminal and with the virtual env activated, just do: `python -m ipykernel install --user --name rtlive`
-- Now, just type `jupyter lab` to launch and run the notebooks :tada
+- Now, just type `jupyter lab` to launch and run the notebooks :tada:
 
 See [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-from-an-environment-yml-file) for detailed instructions if you have issues.
 
