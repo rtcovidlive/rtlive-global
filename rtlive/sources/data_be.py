@@ -90,12 +90,12 @@ def get_data_BE(run_date) -> pandas.DataFrame:
         return gdata
     
     if run_date.date() > datetime.date.today():
-        raise ValueError("Run date is in the future. Nice try.")
+        raise ValueError('Run date is in the future. Nice try.')
     if run_date.date() < datetime.date.today():
         # TODO: implement downloading of historic data
         raise NotImplementedError(
-            "Downloading with a run_date is not yet supported. "
-            f"Today: {datetime.date.today()}, run_date: {run_date}"
+            'Downloading with a run_date is not yet supported. '
+            f'Today: {datetime.date.today()}, run_date: {run_date}'
         )
         
     # Download data from Sciensano and remove last two days to deal with reporting delays
@@ -152,7 +152,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     assert data.index.names == ('region', 'date')
     assert 'new_cases' in data.columns, f'Columns were: {data.columns}'
     assert 'new_tests' in data.columns, f'Columns were: {data.columns}'
-    for col in ["new_cases", "new_tests"]:
+    for col in ['new_cases', 'new_tests']:
         if any(data[col] < 0):
             _log.warning(
                 f'Column {col} has {sum(data[col] < 0)} negative entries!! Overriding with NaN...'
@@ -165,7 +165,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
 def forecast_BE(df: pandas.DataFrame):
     """ Applies testcount interpolation/extrapolation.
 
-    Currently this assumes the OWID data, which only has an "all" region.
+    Currently this assumes the OWID data, which only has an 'all' region.
     In the future, this should be replaced with more fine graned data loading!
     """
     # forecast with existing data
@@ -181,7 +181,7 @@ def forecast_BE(df: pandas.DataFrame):
 
 from .. import data
 data.set_country_support(
-    country_alpha2="BE",
+    country_alpha2='BE',
     compute_zone=data.Zone.Europe,
     region_name=BE_REGION_NAMES,
     region_short_name=BE_REGION_ABBR,
