@@ -34,6 +34,19 @@ Furthermore, we welcome contributions regarding...
 + computational performance
 + model insight
 
+### How to run the code and notebooks
+To be able to contribute, you'll need to be able to run the code and notebooks on this repo. To that end, we strongly recommend [installing the miniconda distribution](https://docs.conda.io/en/latest/miniconda.html) for Python. This will make sure all the packages and necessary compilers come from the same source, and it will allow you to create dedicated virtual environments to run your code safely for each project independently.
+
+Once miniconda is installed, use the terminal and make sure you're in the root of the rtlive-global repository. Then, follow the following steps (still in the terminal):
+
+- Create the virtual environment corresponding to this project: `conda env create -f environment.yml`. This will use the `environment.yml` file that is in the repo and install all the packages automatically. The first line of the `yml` file sets the new environment's name (here, `rtlive`)
+- Activate the new environment: `conda activate rtlive`
+- Verify that the new environment was installed correctly: `conda env list`
+- If you want to run the notebooks, you have to tell Jupyter about this new environment. Still on the terminal and with the virtual env activated, just do: `python -m ipykernel install --user --name rtlive`
+- Now, just type `jupyter lab` to launch and run the notebooks :tada:
+
+See [here](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-from-an-environment-yml-file) for detailed instructions if you have issues.
+
 ## Citing
 To reference this project in a scientific article:
 ```
