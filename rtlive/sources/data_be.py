@@ -12,35 +12,35 @@ BE_REGION_NAMES = {
     '01': 'Flanders',
     '02': 'Wallonia',
     '03': 'Brussels',
-    '04': 'Antwerp',
-    '05': 'Limburg',
-    '06': 'East Flanders',
-    '07': 'Flemish Brabant',
-    '08': 'West Flanders',
-    '09': 'Hainaut',
-    '10': 'Liège',
-    '11': 'Luxembourg',
-    '12': 'Namur',
-    '13': 'Walloon Brabant',
+#     '04': 'Antwerp',
+#     '05': 'Limburg',
+#     '06': 'East Flanders',
+#     '07': 'Flemish Brabant',
+#     '08': 'West Flanders',
+#     '09': 'Hainaut',
+#     '10': 'Liège',
+#     '11': 'Luxembourg',
+#     '12': 'Namur',
+#     '13': 'Walloon Brabant',
 }
 
 # Province and region codes
 # [ISO 3166-2:BE](https://en.wikipedia.org/wiki/ISO_3166-2:BE#Provinces) has no english codes
 BE_REGION_ABBR = {
-    '01': 'BEL',
-    '02': 'FLA',
-    '03': 'WAL',
-    '04': 'BRU',
-    '05': 'ANT',
-    '06': 'LIM',
-    '07': 'EFL',
-    '08': 'FBR',
-    '09': 'WFL',
-    '10': 'LIE',
-    '11': 'LUX',
-    '12': 'NAM',
-    '13': 'WBR',
     'all': 'all',
+    '01': 'FLA',
+    '02': 'WAL',
+    '03': 'BRU',
+#     '04': 'ANT',
+#     '05': 'LIM',
+#     '06': 'EFL',
+#     '07': 'FBR',
+#     '08': 'WFL',
+#     '09': 'HAI',
+#     '10': 'LIE',
+#     '11': 'LUX',
+#     '12': 'NAM',
+#     '13': 'WBR',   
 }
 
 BE_REGION_CODES = {
@@ -50,20 +50,20 @@ BE_REGION_CODES = {
 
 # Source: https://www.ibz.rrn.fgov.be/fileadmin/user_upload/fr/pop/statistiques/population-bevolking-20200101.pdf
 BE_REGION_POPULATION = {
-    'all': 11_476_279,
-    '01':   6_623_505,
-    '02':   3_641_748,
-    '03':   1_211_026,
-    '04':   1_867_366,
-    '05':     876_785,
-    '06':   1_155_148,
-    '07':   1_200_129,
-    '08':   1_345_270,
-    '09':   1_108_481,
-    '10':     624_841,
-    '11':     286_571,
-    '12':     495_474,
-    '13':     405_952
+    'all': 11_476_279, # Belgium
+    '01':   6_623_505, # Flanders
+    '02':   3_641_748, # Wallonia
+    '03':   1_211_026, # Brussels
+#     '04':   1_867_366,
+#     '05':     876_785,
+#     '06':   1_155_148,
+#     '07':   1_200_129,
+#     '08':   1_345_270,
+#     '09':   1_108_481,
+#     '10':     624_841,
+#     '11':     286_571,
+#     '12':     495_474,
+#     '13':     405_952
 }
 
 def get_data_BE(run_date) -> pandas.DataFrame:
@@ -98,18 +98,23 @@ def get_data_BE(run_date) -> pandas.DataFrame:
             f"Today: {datetime.date.today()}, run_date: {run_date}"
         )
         
-    # Download data from Sciensano
-    df_tests = pandas.read_csv('https://epistat.sciensano.be/Data/COVID19BE_tests.csv', parse_dates=['DATE'])
-    # Reformat data into Rtlive.de format at country level
+    # Download data from Sciensano and remove last two days to deal with reporting delays
+    df_tests = (pandas.read_csv('https://epistat.sciensano.be/Data/COVID19BE_tests.csv', parse_dates=['DATE'])
+       .set_index('DATE')
+       .sort_index()
+       .truncate(after=run_date - pandas.DateOffset(2))
+       .reset_index()
+    )
+    # Reformat data into Rtlive.de format at country level all
     df_tests_all_per_day = (df_tests
        .assign(region='all')
        .groupby('DATE', as_index=False)
-       .agg(new_cases=('TESTS_ALL_POS', 'sum'), new_tests=('TESTS_ALL', 'sum'), region=('region', 'first'))
+       .agg(positive=('TESTS_ALL_POS', 'sum'), total=('TESTS_ALL', 'sum'), region=('region', 'first'))
        .rename(columns={'DATE':'date'})
-       .set_index(["region", "date"])
+       .set_index(['region', "date"])
        .sort_index()
     )
-    # Redistribute the nan for the column TESTS_ALL_POS at region level
+    # Redistribute the nan for the column TESTS_ALL_POS for regions Flanders, Wallonia and Brussels
     df_tests_positive = (df_tests
         .fillna('Nan')
         .groupby(['DATE'])
@@ -118,7 +123,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
         .reset_index()
         .rename(columns={'DATE':'date', 'REGION':'region', 0:'new_cases'})
     )
-    # Redistribute the nan for the column TESTS_ALL at region level
+    # Redistribute the nan for the column TESTS_ALL for regions Flanders, Wallonia and Brussels
     df_tests_all = (df_tests
         .fillna('Nan')
         .groupby(['DATE'])
@@ -129,18 +134,21 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     )
     
     # Combine the total number of tests and the number of positive tests into a basetable
-    df_tests_per_province_day = pd.concat([df_tests_all, df_tests_positive['new_cases']], axis=1).set_index(['region', 'date'])
+    df_tests_per_region_day = pd.concat([df_tests_all, df_tests_positive['new_cases']], axis=1).set_index(['region', 'date'])
     
-    data = pd.concat([df_tests_all_per_day, df_tests_per_province_day], axis=0)
+    # TODO: aggregate tests at province level
+    
+    # Combine the results at country level with region level
+    data = pd.concat([df_tests_all_per_day, df_tests_per_region_day], axis=0).sort_index()
     
     assert isinstance(data, pandas.DataFrame)
-    assert data.index.names == ("region", "date")
-    assert "new_cases" in data.columns, f"Columns were: {data.columns}"
-    assert "new_tests" in data.columns, f"Columns were: {data.columns}"
+    assert data.index.names == ('region', 'date')
+    assert 'new_cases' in data.columns, f'Columns were: {data.columns}'
+    assert 'new_tests' in data.columns, f'Columns were: {data.columns}'
     for col in ["new_cases", "new_tests"]:
         if any(data[col] < 0):
             _log.warning(
-                f"Column {col} has {sum(data[col] < 0)} negative entries!! Overriding with NaN..."
+                f'Column {col} has {sum(data[col] < 0)} negative entries!! Overriding with NaN...'
             )
             data.loc[data[col] < 0, col] = numpy.nan
 
