@@ -131,7 +131,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     
     df_tests_region_per_day = pd.concat([df_tests_all_per_day, df_tests_per_province_day], axis=0)
     
-    return df_tests_per_province_day
+    return df_tests_region_per_day
 
 
 def forecast_BE(df: pandas.DataFrame):
