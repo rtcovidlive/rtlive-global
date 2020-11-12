@@ -12,16 +12,16 @@ BE_REGION_NAMES = {
     'Flanders': 'Flanders',
     'Wallonia': 'Wallonia',
     'Brussels': 'Brussels',
-#     'Antwerpen': 'Antwerp',
-#     'Limburg': 'Limburg',
-#     'OostVlaanderen': 'East Flanders',
-#     'VlaamsBrabant': 'Flemish Brabant',
-#     'WestVlaanderen': 'West Flanders',
-#     'Hainaut': 'Hainaut',
-#     'Liège': 'Liège',
-#     'Luxembourg': 'Luxembourg',
-#     'Namur': 'Namur',
-#     'BrabantWallon': 'Walloon Brabant',
+    'Antwerpen': 'Antwerp',
+    'Limburg': 'Limburg',
+    'OostVlaanderen': 'East Flanders',
+    'VlaamsBrabant': 'Flemish Brabant',
+    'WestVlaanderen': 'West Flanders',
+    'Hainaut': 'Hainaut',
+    'Liège': 'Liège',
+    'Luxembourg': 'Luxembourg',
+    'Namur': 'Namur',
+    'BrabantWallon': 'Walloon Brabant',
 }
 
 # Province and region codes
@@ -31,16 +31,16 @@ BE_REGION_ABBR = {
     'Flanders': 'FLA',
     'Wallonia': 'WAL',
     'Brussels': 'BRU',
-#     'Antwerpen': 'ANT',
-#     'Limburg': 'LIM',
-#     'OostVlaanderen': 'EFL',
-#     'VlaamsBrabant': 'FBR',
-#     'WestVlaanderen': 'WFL',
-#     'Hainaut': 'HAI',
-#     'Liège': 'LIE',
-#     'Luxembourg': 'LUX',
-#     'Namur': 'NAM',
-#     'BrabantWallon': 'WBR',   
+    'Antwerpen': 'ANT',
+    'Limburg': 'LIM',
+    'OostVlaanderen': 'EFL',
+    'VlaamsBrabant': 'FBR',
+    'WestVlaanderen': 'WFL',
+    'Hainaut': 'HAI',
+    'Liège': 'LIE',
+    'Luxembourg': 'LUX',
+    'Namur': 'NAM',
+    'BrabantWallon': 'WBR',   
 }
 
 BE_REGION_CODES = {
@@ -50,20 +50,20 @@ BE_REGION_CODES = {
 
 # Source: https://www.ibz.rrn.fgov.be/fileadmin/user_upload/fr/pop/statistiques/population-bevolking-20200101.pdf
 BE_REGION_POPULATION = {
-    'all': 11_476_279, # Belgium
+    'all':           11_476_279, # Belgium
     'Flanders':       6_623_505,
     'Wallonia':       3_641_748,
     'Brussels':       1_211_026,
-#     'Antwerpen':      1_867_366,
-#     'Limburg':          876_785,
-#     'OostVlaanderen': 1_155_148,
-#     'VlaamsBrabant':  1_200_129,
-#     'WestVlaanderen': 1_345_270,
-#     'Hainaut':        1_108_481,
-#     'Liège':            624_841,
-#     'Luxembourg':       286_571,
-#     'Namur':            495_474,
-#     'BrabantWallon':    405_952
+    'Antwerpen':      1_867_366,
+    'Limburg':          876_785,
+    'OostVlaanderen': 1_524_077,
+    'VlaamsBrabant':  1_155_148,
+    'WestVlaanderen': 1_200_129,
+    'Hainaut':        1_345_270,
+    'Liège':          1_108_481,
+    'Luxembourg':       286_571,
+    'Namur':            495_474,
+    'BrabantWallon':    405_952
 }
 
 def get_data_BE(run_date) -> pandas.DataFrame:
@@ -106,7 +106,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
        .reset_index()
     )
     # Reformat data into Rtlive.de format at country level all
-    df_tests_all_per_day = (df_tests
+    df_tests_per_all_day = (df_tests
        .assign(region='all')
        .groupby('DATE', as_index=False)
        .agg(positive=('TESTS_ALL_POS', 'sum'), total=('TESTS_ALL', 'sum'), region=('region', 'first'))
@@ -136,10 +136,17 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     # Combine the total number of tests and the number of positive tests into a basetable
     df_tests_per_region_day = pd.concat([df_tests_all, df_tests_positive['new_cases']], axis=1).set_index(['region', 'date'])
     
-    # TODO: aggregate tests at province level
+    # Test per province (Ignore the nan's for the moment)
+    df_tests_per_province_day = (df_tests
+       .groupby(['PROVINCE', 'DATE'], as_index=False)
+       .agg(new_cases=('TESTS_ALL_POS', 'sum'), new_tests=('TESTS_ALL', 'sum'))
+       .rename(columns={'DATE':'date', 'PROVINCE':'region'})
+       .set_index(["region", "date"])
+       .sort_index()
+    )
     
     # Combine the results at country level with region level
-    data = pd.concat([df_tests_all_per_day, df_tests_per_region_day], axis=0).sort_index()
+    data = pd.concat([df_tests_per_all_day, df_tests_per_region_day, df_tests_per_province_day], axis=0).sort_index()
     
     assert isinstance(data, pandas.DataFrame)
     assert data.index.names == ('region', 'date')
