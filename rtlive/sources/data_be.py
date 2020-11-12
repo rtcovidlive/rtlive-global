@@ -9,38 +9,38 @@ _log = logging.getLogger(__file__)
 # From https://en.wikipedia.org/wiki/Provinces_of_Belgium
 BE_REGION_NAMES = {
     'all': 'Belgium',
-    '01': 'Flanders',
-    '02': 'Wallonia',
-    '03': 'Brussels',
-#     '04': 'Antwerp',
-#     '05': 'Limburg',
-#     '06': 'East Flanders',
-#     '07': 'Flemish Brabant',
-#     '08': 'West Flanders',
-#     '09': 'Hainaut',
-#     '10': 'Liège',
-#     '11': 'Luxembourg',
-#     '12': 'Namur',
-#     '13': 'Walloon Brabant',
+    'Flanders': 'Flanders',
+    'Wallonia': 'Wallonia',
+    'Brussels': 'Brussels',
+#     'Antwerpen': 'Antwerp',
+#     'Limburg': 'Limburg',
+#     'OostVlaanderen': 'East Flanders',
+#     'VlaamsBrabant': 'Flemish Brabant',
+#     'WestVlaanderen': 'West Flanders',
+#     'Hainaut': 'Hainaut',
+#     'Liège': 'Liège',
+#     'Luxembourg': 'Luxembourg',
+#     'Namur': 'Namur',
+#     'BrabantWallon': 'Walloon Brabant',
 }
 
 # Province and region codes
 # [ISO 3166-2:BE](https://en.wikipedia.org/wiki/ISO_3166-2:BE#Provinces) has no english codes
 BE_REGION_ABBR = {
     'all': 'all',
-    '01': 'FLA',
-    '02': 'WAL',
-    '03': 'BRU',
-#     '04': 'ANT',
-#     '05': 'LIM',
-#     '06': 'EFL',
-#     '07': 'FBR',
-#     '08': 'WFL',
-#     '09': 'HAI',
-#     '10': 'LIE',
-#     '11': 'LUX',
-#     '12': 'NAM',
-#     '13': 'WBR',   
+    'Flanders': 'FLA',
+    'Wallonia': 'WAL',
+    'Brussels': 'BRU',
+#     'Antwerpen': 'ANT',
+#     'Limburg': 'LIM',
+#     'OostVlaanderen': 'EFL',
+#     'VlaamsBrabant': 'FBR',
+#     'WestVlaanderen': 'WFL',
+#     'Hainaut': 'HAI',
+#     'Liège': 'LIE',
+#     'Luxembourg': 'LUX',
+#     'Namur': 'NAM',
+#     'BrabantWallon': 'WBR',   
 }
 
 BE_REGION_CODES = {
@@ -51,19 +51,19 @@ BE_REGION_CODES = {
 # Source: https://www.ibz.rrn.fgov.be/fileadmin/user_upload/fr/pop/statistiques/population-bevolking-20200101.pdf
 BE_REGION_POPULATION = {
     'all': 11_476_279, # Belgium
-    '01':   6_623_505, # Flanders
-    '02':   3_641_748, # Wallonia
-    '03':   1_211_026, # Brussels
-#     '04':   1_867_366,
-#     '05':     876_785,
-#     '06':   1_155_148,
-#     '07':   1_200_129,
-#     '08':   1_345_270,
-#     '09':   1_108_481,
-#     '10':     624_841,
-#     '11':     286_571,
-#     '12':     495_474,
-#     '13':     405_952
+    'Flanders':       6_623_505,
+    'Wallonia':       3_641_748,
+    'Brussels':       1_211_026,
+#     'Antwerpen':      1_867_366,
+#     'Limburg':          876_785,
+#     'OostVlaanderen': 1_155_148,
+#     'VlaamsBrabant':  1_200_129,
+#     'WestVlaanderen': 1_345_270,
+#     'Hainaut':        1_108_481,
+#     'Liège':            624_841,
+#     'Luxembourg':       286_571,
+#     'Namur':            495_474,
+#     'BrabantWallon':    405_952
 }
 
 def get_data_BE(run_date) -> pandas.DataFrame:
