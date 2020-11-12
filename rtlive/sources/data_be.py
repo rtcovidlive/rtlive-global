@@ -46,22 +46,22 @@ BE_REGION_CODES = {
     for k, v in BE_REGION_NAMES.items()
 }
 
-# https://www.ibz.rrn.fgov.be/fileadmin/user_upload/fr/pop/statistiques/population-bevolking-20200101.pdf
+# Source: https://www.ibz.rrn.fgov.be/fileadmin/user_upload/fr/pop/statistiques/population-bevolking-20200101.pdf
 BE_REGION_POPULATION = {
     'all': 11_476_279,
-    '01': 6_623_505,
-    '02': 3_641_748,
-    '03': 1_211_026,
-    '05': 1_867_366,
-    '06': 876_785,
-    '07': 1_524_077,
-    '08': 1_155_148,
-    '09': 1_200_129,
-    '10': 1_345_270,
-    '11': 1_108_481,
-    '12': 286_571,
-    '13': 495_474,
-    '14': 302_265,
+    '01':   6_623_505,
+    '02':   3_641_748,
+    '03':   1_211_026,
+    '04':   1_867_366,
+    '05':     876_785,
+    '06':   1_155_148,
+    '07':   1_200_129,
+    '08':   1_345_270,
+    '09':   1_108_481,
+    '10':     286_571,
+    '11':     495_474,
+    '12':     302_265,
+    '13':     405_952
 }
 
 def get_data_BE(run_date) -> pandas.DataFrame:
