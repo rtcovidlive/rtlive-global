@@ -98,11 +98,11 @@ def get_data_BE(run_date) -> pandas.DataFrame:
         
     # Download data from Sciensano
     df_tests = pandas.read_csv('https://epistat.sciensano.be/Data/COVID19BE_tests.csv', parse_dates=['DATE'])
-    # Reformat data into Rtlive format at country level
+    # Reformat data into Rtlive.de format at country level
     df_tests_all_per_day = (df_tests
        .assign(region='all')
        .groupby('DATE', as_index=False)
-       .agg(positive=('TESTS_ALL_POS', 'sum'), total=('TESTS_ALL', 'sum'), region=('region', 'first'))
+       .agg(new_cases=('TESTS_ALL_POS', 'sum'), new_tests=('TESTS_ALL', 'sum'), region=('region', 'first'))
        .rename(columns={'DATE':'date'})
        .set_index(["region", "date"])
        .sort_index()
@@ -114,7 +114,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
         .apply(redistribute, 'TESTS_ALL_POS')
         .stack()
         .reset_index()
-        .rename(columns={'DATE':'date', 'REGION':'region', 0:'positive'})
+        .rename(columns={'DATE':'date', 'REGION':'region', 0:'new_cases'})
     )
     # Redistribute the nan for the column TESTS_ALL at region level
     df_tests_all = (df_tests
@@ -123,15 +123,26 @@ def get_data_BE(run_date) -> pandas.DataFrame:
         .apply(redistribute, 'TESTS_ALL')
         .stack()
         .reset_index()
-        .rename(columns={'DATE':'date', 'REGION':'region', 0:'total'})
+        .rename(columns={'DATE':'date', 'REGION':'region', 0:'new_tests'})
     )
     
     # Combine the total number of tests and the number of positive tests into a basetable
-    df_tests_per_province_day = pd.concat([df_tests_all, df_tests_positive['positive']], axis=1).set_index(['region', 'date'])
+    df_tests_per_province_day = pd.concat([df_tests_all, df_tests_positive['new_cases']], axis=1).set_index(['region', 'date'])
     
-    df_tests_region_per_day = pd.concat([df_tests_all_per_day, df_tests_per_province_day], axis=0)
+    data = pd.concat([df_tests_all_per_day, df_tests_per_province_day], axis=0)
     
-    return df_tests_region_per_day
+    assert isinstance(data, pandas.DataFrame)
+    assert data.index.names == ("region", "date")
+    assert "new_cases" in data.columns, f"Columns were: {data.columns}"
+    assert "new_tests" in data.columns, f"Columns were: {data.columns}"
+    for col in ["new_cases", "new_tests"]:
+        if any(data[col] < 0):
+            _log.warning(
+                f"Column {col} has {sum(data[col] < 0)} negative entries!! Overriding with NaN..."
+            )
+            data.loc[data[col] < 0, col] = numpy.nan
+
+    return data
 
 
 def forecast_BE(df: pandas.DataFrame):
