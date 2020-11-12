@@ -1,44 +1,67 @@
 import logging
 import pandas
+import numpy
 
 from .. import preprocessing
 
 _log = logging.getLogger(__file__)
 
-# From https://nl.wikipedia.org/wiki/Provincies_van_Belgi%C3%AB
+# From https://en.wikipedia.org/wiki/Provinces_of_Belgium
 BE_REGION_NAMES = {
     'all': 'Belgium',
-#     '01': 'Vlaanderen',
-#     '02': 'Wallonie',
-#     '03': 'Brussel',
-#     '05': 'Antwerpen',
-#     '06': 'Limburg',
-#     '07': 'Oost-Vlaanderen',
-#     '08': 'Vlaams-Brabant',
-#     '09': 'West-Vlaanderen',
-#     '10': 'Henegouwen',
-#     '11': 'Luik',
-#     '12': 'Luxemburg',
-#     '13': 'Namen',
-#     '14': 'Waals-Brabant',
+    '01': 'Flanders',
+    '02': 'Wallonia',
+    '03': 'Brussels',
+    '04': 'Antwerp',
+    '05': 'Limburg',
+    '06': 'East Flanders',
+    '07': 'Flemish Brabant',
+    '08': 'West Flanders',
+    '09': 'Hainaut',
+    '10': 'Liège',
+    '11': 'Luxembourg',
+    '12': 'Namur',
+    '13': 'Walloon Brabant',
+}
+
+BE_REGION_ABBR = {
+    '01': 'BEL',
+    '02': 'FLA',
+    '03': 'WAL',
+    '04': 'BRU',
+    '05': 'ANT',
+    '06': 'LIM',
+    '07': 'EFL',
+    '08': 'FBR',
+    '09': 'WFL',
+    '10': 'LIE',
+    '11': 'LUX',
+    '12': 'NAM',
+    '13': 'WBR',
+    'all': 'all',
+}
+
+BE_REGION_CODES = {
+    v : k
+    for k, v in BE_REGION_NAMES.items()
 }
 
 # https://www.ibz.rrn.fgov.be/fileadmin/user_upload/fr/pop/statistiques/population-bevolking-20200101.pdf
 BE_REGION_POPULATION = {
     'all': 11_476_279,
-#     '01': 6_623_505,
-#     '02': 3_641_748,
-#     '03': 1_211_026,
-#     '05': 1_867_366,
-#     '06': 876_785,
-#     '07': 1_524_077,
-#     '08': 1_155_148,
-#     '09': 1_200_129,
-#     '10': 1_345_270,
-#     '11': 1_108_481,
-#     '12': 286_571,
-#     '13': 495_474,
-#     '14': 302_265,
+    '01': 6_623_505,
+    '02': 3_641_748,
+    '03': 1_211_026,
+    '05': 1_867_366,
+    '06': 876_785,
+    '07': 1_524_077,
+    '08': 1_155_148,
+    '09': 1_200_129,
+    '10': 1_345_270,
+    '11': 1_108_481,
+    '12': 286_571,
+    '13': 495_474,
+    '14': 302_265,
 }
 
 def get_data_BE(run_date) -> pandas.DataFrame:
@@ -54,6 +77,16 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     df : pandas.DataFrame
         table with columns as required by rtlive/data.py API
     """
+    
+    def redistribute(g, col):
+        gdata = g.groupby('REGION')[col].sum()
+        gdata.loc['Brussels'] += gdata.loc['Nan'] * (gdata.loc['Brussels']/(gdata.loc['Brussels'] + gdata.loc['Flanders'] + gdata.loc['Wallonia']))
+        gdata.loc['Flanders'] += gdata.loc['Nan'] * (gdata.loc['Flanders']/(gdata.loc['Brussels'] + gdata.loc['Flanders'] + gdata.loc['Wallonia']))
+        gdata.loc['Wallonia'] += gdata.loc['Nan'] * (gdata.loc['Wallonia']/(gdata.loc['Brussels'] + gdata.loc['Flanders'] + gdata.loc['Wallonia']))
+        gdata.drop(index='Nan', inplace=True)
+        gdata = numpy.round(gdata.fillna(0)).astype(int)
+        return gdata
+    
     if run_date.date() > datetime.date.today():
         raise ValueError("Run date is in the future. Nice try.")
     if run_date.date() < datetime.date.today():
@@ -65,8 +98,8 @@ def get_data_BE(run_date) -> pandas.DataFrame:
         
     # Download data from Sciensano
     df_tests = pandas.read_csv('https://epistat.sciensano.be/Data/COVID19BE_tests.csv', parse_dates=['DATE'])
-    # Reformat data into Rtlive format
-    df_tests_per_day = (df_tests
+    # Reformat data into Rtlive format at country level
+    df_tests_all_per_day = (df_tests
        .assign(region='all')
        .groupby('DATE', as_index=False)
        .agg(positive=('TESTS_ALL_POS', 'sum'), total=('TESTS_ALL', 'sum'), region=('region', 'first'))
@@ -74,8 +107,31 @@ def get_data_BE(run_date) -> pandas.DataFrame:
        .set_index(["region", "date"])
        .sort_index()
     )
+    # Redistribute the nan for the column TESTS_ALL_POS at region level
+    df_tests_positive = (df_tests
+        .fillna('Nan')
+        .groupby(['DATE'])
+        .apply(redistribute, 'TESTS_ALL_POS')
+        .stack()
+        .reset_index()
+        .rename(columns={'DATE':'date', 'REGION':'region', 0:'positive'})
+    )
+    # Redistribute the nan for the column TESTS_ALL at region level
+    df_tests_all = (df_tests
+        .fillna('Nan')
+        .groupby(['DATE'])
+        .apply(redistribute, 'TESTS_ALL')
+        .stack()
+        .reset_index()
+        .rename(columns={'DATE':'date', 'REGION':'region', 0:'total'})
+    )
     
-    return df_tests_per_day
+    # Combine the total number of tests and the number of positive tests into a basetable
+    df_tests_per_province_day = pd.concat([df_tests_all, df_tests_positive['positive']], axis=1).set_index(['region', 'date'])
+    
+    df_tests_region_per_day = pd.concat([df_tests_all_per_day, df_tests_per_province_day], axis=0)
+    
+    return df_tests_per_province_day
 
 
 def forecast_BE(df: pandas.DataFrame):
@@ -100,6 +156,7 @@ data.set_country_support(
     country_alpha2="BE",
     compute_zone=data.Zone.Europe,
     region_name=BE_REGION_NAMES,
+    region_short_name=BE_REGION_ABBR,
     region_population=BE_REGION_POPULATION,
     fn_load=get_data_BE,
     fn_process=forecast_BE,
