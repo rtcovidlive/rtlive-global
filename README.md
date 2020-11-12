@@ -35,9 +35,9 @@ Furthermore, we welcome contributions regarding...
 + model insight
 
 ### How to run the code and notebooks
-To be able to contribute, you'll need to be able to run the code and notebooks on this repo. To that end, we strongly recommend [installing the  miniconda distribution](https://docs.conda.io/en/latest/miniconda.html) for python. This will make sure all the packages and necessary compilers come from the same source, and it will allow you to create dedicated virtual environments to run your code safely for each project independently.
+To be able to contribute, you'll need to be able to run the code and notebooks on this repo. To that end, we strongly recommend [installing the miniconda distribution](https://docs.conda.io/en/latest/miniconda.html) for Python. This will make sure all the packages and necessary compilers come from the same source, and it will allow you to create dedicated virtual environments to run your code safely for each project independently.
 
-Once Anaconda is installed, use the terminal and make sure you're in the root of the rtlive-global repository. Then, follow the following steps (still in the terminal):
+Once miniconda is installed, use the terminal and make sure you're in the root of the rtlive-global repository. Then, follow the following steps (still in the terminal):
 
 - Create the virtual environment corresponding to this project: `conda env create -f environment.yml`. This will use the `environment.yml` file that is in the repo and install all the packages automatically. The first line of the `yml` file sets the new environment's name (here, `rtlive`)
 - Activate the new environment: `conda activate rtlive`
