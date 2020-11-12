@@ -24,6 +24,8 @@ BE_REGION_NAMES = {
     '13': 'Walloon Brabant',
 }
 
+# Province and region codes
+# [ISO 3166-2:BE](https://en.wikipedia.org/wiki/ISO_3166-2:BE#Provinces) has no english codes
 BE_REGION_ABBR = {
     '01': 'BEL',
     '02': 'FLA',
