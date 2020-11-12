@@ -64,7 +64,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
         )
         
     # Download data from Sciensano
-    df_tests = pd.read_csv('https://epistat.sciensano.be/Data/COVID19BE_tests.csv', parse_dates=['DATE'])
+    df_tests = pandas.read_csv('https://epistat.sciensano.be/Data/COVID19BE_tests.csv', parse_dates=['DATE'])
     # Reformat data into Rtlive format
     df_tests_per_day = (df_tests
        .assign(region='all')
