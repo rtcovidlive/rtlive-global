@@ -135,7 +135,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     )
     
     # Combine the total number of tests and the number of positive tests into a basetable
-    df_tests_per_region_day = pd.concat([df_tests_all, df_tests_positive['new_cases']], axis=1).set_index(['region', 'date'])
+    df_tests_per_region_day = pandas.concat([df_tests_all, df_tests_positive['new_cases']], axis=1).set_index(['region', 'date'])
     
     # Test per province (Ignore the nan's for the moment)
     df_tests_per_province_day = (df_tests
@@ -147,7 +147,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     )
     
     # Combine the results at country level with region level
-    data = pd.concat([df_tests_per_all_day, df_tests_per_region_day, df_tests_per_province_day], axis=0).sort_index()
+    data = pandas.concat([df_tests_per_all_day, df_tests_per_region_day, df_tests_per_province_day], axis=0).sort_index()
     
     assert isinstance(data, pandas.DataFrame)
     assert data.index.names == ('region', 'date')
