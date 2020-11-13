@@ -163,21 +163,52 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     return data
 
 
-def forecast_BE(df: pandas.DataFrame):
-    """ Applies testcount interpolation/extrapolation.
-
-    Currently this assumes the OWID data, which only has an 'all' region.
-    In the future, this should be replaced with more fine graned data loading!
+def forecast_BE(df: pandas.DataFrame) -> Tuple[pandas.DataFrame, dict]:
+    """
+    Applies test count interpolation/extrapolation to French data.
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Data as returned by data loader function.
+    Returns
+    -------
+    df : pandas.DataFrame
+        Input dataframe with a new column "predicted_new_tests" and an index expanded back to
+        01/01/2020 (filled with zeros until 13/05/2020) to account for the absence of tests in this
+        period.
+    results : dict
+        The fbprophet results by region
     """
     # forecast with existing data
-    df['predicted_new_tests'], results = preprocessing.predict_testcounts_all_regions(df, 'BE')
+    df["predicted_new_tests"], results = preprocessing.predict_testcounts_all_regions(
+        df, "BE"
+    )
     # interpolate the initial testing ramp-up to account for missing data
-    df_region = df.xs('all')
-    df_region.loc['2020-01-01', 'predicted_new_tests'] = 0
-    df_region.predicted_new_tests = df_region.predicted_new_tests.interpolate('linear')
-    df_region['region'] = 'all'
-    df = df_region.reset_index().set_index(['region', 'date'])    
-    return df, results
+    df_list = []
+    for region in df.index.get_level_values(level="region").unique():
+        df_region = df.xs(region).copy()
+
+        df_complement = pandas.DataFrame(
+            index=pandas.date_range(
+                start="2020-01-01",
+                end=df_region.index.get_level_values(level="date")[0]
+                - pandas.DateOffset(1, "D"),
+                freq="D",
+            ),
+            columns=df_region.columns,
+        )
+        df_complement["predicted_new_tests"] = 0
+
+        df_region = df_complement.append(df_region)
+        df_region.index.name = "date"
+        df_region.predicted_new_tests = df_region.predicted_new_tests.interpolate(
+            "linear"
+        )
+
+        df_region["region"] = region
+        df_list.append(df_region.reset_index().set_index(["region", "date"]))
+
+    return pandas.concat(df_list), results
 
 
 from .. import data
