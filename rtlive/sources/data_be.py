@@ -110,7 +110,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     df_tests_per_all_day = (df_tests
        .assign(region='all')
        .groupby('DATE', as_index=False)
-       .agg(positive=('TESTS_ALL_POS', 'sum'), total=('TESTS_ALL', 'sum'), region=('region', 'first'))
+       .agg(new_cases=('TESTS_ALL_POS', 'sum'), new_tests=('TESTS_ALL', 'sum'), region=('region', 'first'))
        .rename(columns={'DATE':'date'})
        .set_index(['region', "date"])
        .sort_index()
