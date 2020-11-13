@@ -3,6 +3,8 @@ import pandas
 import numpy
 import datetime
 
+from typing import Dict, Tuple, Union
+
 from .. import preprocessing
 
 _log = logging.getLogger(__file__)
@@ -165,7 +167,7 @@ def get_data_BE(run_date) -> pandas.DataFrame:
 
 def forecast_BE(df: pandas.DataFrame) -> Tuple[pandas.DataFrame, dict]:
     """
-    Applies test count interpolation/extrapolation to French data.
+    Applies test count interpolation/extrapolation to Belgium data.
     Parameters
     ----------
     df : pandas.DataFrame
