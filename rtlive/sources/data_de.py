@@ -101,7 +101,7 @@ DE_REGIONS = list(DE_REGION_NAMES.keys())
 # this constant is used in the Airflow DAG to save a copy of the raw data for archiving
 CSV_SAVEPATH = None
 # at least one testcount CSV wasn't formatted according to ISO 8603
-NON_ISO_TESTCOUNTS = { "2020-10-06 tests_daily_BL.CSV" }
+NON_ISO_TESTCOUNTS = { "2020-10-06 tests_daily_BL.CSV", "2020-11-13 tests_daily_BL.CSV" }
 
 
 def get_data_DE(run_date) -> pandas.DataFrame:
