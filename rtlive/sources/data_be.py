@@ -147,12 +147,14 @@ def get_data_BE(run_date: pandas.Timestamp) -> pandas.DataFrame:
     df_tests_per_region_day = pandas.concat([df_tests_all, df_tests_positive['new_cases']], axis=1).set_index(['region', 'date'])
     
     # Test per province (Ignore the nan's for the moment)
-    df_tests_per_province_day = (df_tests
-        .rename(columns={'PROVINCE':'region'})
-       .groupby(['region', 'date'], as_index=True)
+    df_tests_per_province_day = (df_tests[df_tests['REGION'] != 'Brussels']
+       .groupby(['PROVINCE', 'DATE'], as_index=False)
        .agg(new_cases=('TESTS_ALL_POS', 'sum'), new_tests=('TESTS_ALL', 'sum'))
+       .rename(columns={'DATE':'date', 'PROVINCE':'region'})
+       .set_index(["region", "date"])
+       .sort_index()
     )
-    df_tests_per_province_day.index.name = ("region", "date")
+    df_tests_per_province_day.index.name = ('region', 'date')
     
     # Combine the results at country level with region level
     data = pandas.concat([df_tests_per_all_day, df_tests_per_region_day, df_tests_per_province_day], axis=0).sort_index()
