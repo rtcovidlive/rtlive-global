@@ -1,6 +1,5 @@
 import logging
 import pandas
-import numpy
 import datetime
 
 from typing import Dict, Tuple, Union
@@ -12,24 +11,25 @@ _log = logging.getLogger(__file__)
 # From https://en.wikipedia.org/wiki/Provinces_of_Belgium
 BE_REGION_NAMES = {
     'all': 'Belgium',
-    'Flanders': 'Flanders',
-    'Wallonia': 'Wallonia',
-    'Brussels': 'Brussels',
-    'Antwerpen': 'Antwerp',
-    'Limburg': 'Limburg',
-    'OostVlaanderen': 'East Flanders',
-    'VlaamsBrabant': 'Flemish Brabant',
-    'WestVlaanderen': 'West Flanders',
-    'Hainaut': 'Hainaut',
-    'Liège': 'Liège',
-    'Luxembourg': 'Luxembourg',
-    'Namur': 'Namur',
-    'BrabantWallon': 'Walloon Brabant',
+    'FLA': 'Vlaanderen',
+    'WAL': 'Wallonie',
+    'BRU': 'Brussel',
+    'ANT': 'Antwerpen',
+    'LIM': 'Limburg',
+    'EFL': 'Oost-Vlaanderen',
+    'FBR': 'Vlaams-Brabant',
+    'WFL': 'West-Vlaanderen',
+    'HAI': 'Hainaut',
+    'LIE': 'Liège',
+    'LUX': 'Luxembourg',
+    'NAM': 'Namur',
+    'WBR': 'Brabant wallon',
 }
 
 # Province and region codes
 # [ISO 3166-2:BE](https://en.wikipedia.org/wiki/ISO_3166-2:BE#Provinces) has no english codes
-BE_REGION_ABBR = {
+# Mapping of the keys in columns 'REGION' and 'PROVINCE' in the input file to a short code.
+BE_REGION_INPUT_ABBR = {
     'all': 'all',
     'Flanders': 'FLA',
     'Wallonia': 'WAL',
@@ -53,23 +53,23 @@ BE_REGION_CODES = {
 
 # Source: https://www.ibz.rrn.fgov.be/fileadmin/user_upload/fr/pop/statistiques/population-bevolking-20200101.pdf
 BE_REGION_POPULATION = {
-    'all':           11_476_279, # Belgium
-    'Flanders':       6_623_505,
-    'Wallonia':       3_641_748,
-    'Brussels':       1_211_026,
-    'Antwerpen':      1_867_366,
-    'Limburg':          876_785,
-    'OostVlaanderen': 1_524_077,
-    'VlaamsBrabant':  1_155_148,
-    'WestVlaanderen': 1_200_129,
-    'Hainaut':        1_345_270,
-    'Liège':          1_108_481,
-    'Luxembourg':       286_571,
-    'Namur':            495_474,
-    'BrabantWallon':    405_952
+    'all': 11_476_279, # Belgium
+    'FLA':  6_623_505,
+    'WAL':  3_641_748,
+    'BRU':  1_211_026,
+    'ANT':  1_867_366,
+    'LIM':    876_785,
+    'EFL':  1_524_077,
+    'FBR':  1_155_148,
+    'WFL':  1_200_129,
+    'HAI':  1_345_270,
+    'LIE':  1_108_481,
+    'LUX':    286_571,
+    'NAM':    495_474,
+    'WBR':    405_952
 }
 
-def get_data_BE(run_date) -> pandas.DataFrame:
+def get_data_BE(run_date: pandas.Timestamp) -> pandas.DataFrame:
     """
     Retrieve daily (run_date) regions and append national data (key 'all') to it
     Parameters
@@ -83,13 +83,13 @@ def get_data_BE(run_date) -> pandas.DataFrame:
         table with columns as required by rtlive/data.py API
     """
     
-    def redistribute(g, col):
-        gdata = g.groupby('REGION')[col].sum()
+    def redistribute(group: pandas.DataFrame, col: str) -> pandas.Series:
+        gdata = group.groupby('REGION')[col].sum()
         gdata.loc['Brussels'] += gdata.loc['Nan'] * (gdata.loc['Brussels']/(gdata.loc['Brussels'] + gdata.loc['Flanders'] + gdata.loc['Wallonia']))
         gdata.loc['Flanders'] += gdata.loc['Nan'] * (gdata.loc['Flanders']/(gdata.loc['Brussels'] + gdata.loc['Flanders'] + gdata.loc['Wallonia']))
         gdata.loc['Wallonia'] += gdata.loc['Nan'] * (gdata.loc['Wallonia']/(gdata.loc['Brussels'] + gdata.loc['Flanders'] + gdata.loc['Wallonia']))
         gdata.drop(index='Nan', inplace=True)
-        gdata = numpy.round(gdata.fillna(0)).astype(int)
+        gdata = gdata.fillna(0).round(0).astype(int)
         return gdata
     
     if run_date.date() > datetime.date.today():
@@ -105,7 +105,6 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     df_tests = (pandas.read_csv('https://epistat.sciensano.be/Data/COVID19BE_tests.csv', parse_dates=['DATE'])
        .set_index('DATE')
        .sort_index()
-       .truncate(after=run_date - pandas.DateOffset(2))
        .reset_index()
     )
     # Reformat data into Rtlive.de format at country level all
@@ -150,6 +149,8 @@ def get_data_BE(run_date) -> pandas.DataFrame:
     
     # Combine the results at country level with region level
     data = pandas.concat([df_tests_per_all_day, df_tests_per_region_day, df_tests_per_province_day], axis=0).sort_index()
+    
+    data.index = data.index.set_levels(data.index.levels[0].map(BE_REGION_INPUT_ABBR.get), 'region')
     
     assert isinstance(data, pandas.DataFrame)
     assert data.index.names == ('region', 'date')
@@ -218,7 +219,6 @@ data.set_country_support(
     country_alpha2='BE',
     compute_zone=data.Zone.Europe,
     region_name=BE_REGION_NAMES,
-    region_short_name=BE_REGION_ABBR,
     region_population=BE_REGION_POPULATION,
     fn_load=get_data_BE,
     fn_process=forecast_BE,
