@@ -244,7 +244,7 @@ def get_testcounts_DE(run_date, take_latest:bool=True) -> pandas.DataFrame:
 
     # detect the datetime format
     iso_format = True
-    with open(fp_testcounts) as tcfile:
+    with open(fp_testcounts, encoding="latin-1") as tcfile:
         tcfile.readline()
         line2 = tcfile.readline()
         iso_format = ";2020-" in line2
