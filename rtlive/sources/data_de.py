@@ -4,8 +4,7 @@ Depends on "2020-mm-dd_tests_daily_BL.CSV" files to be present in the
 /data folder at the root of the rtlive-global repository.
 
 These files are currently not publicly available, but their structure is expected
-like in the following example. Date formatting must be 2020-03-23 or 23.09.2020 for
-files specified in the NON_ISO_TESTCOUNTS constant.
+like in the following example. Date formatting must be 2020-03-23 or 23.09.2020.
 
 Bundesland;Datum;Testungen (auf Fünfzig aufgerundet );Anteil positiv (auf zwei Stellen gerundet )
 ...
@@ -100,8 +99,6 @@ LABEL_TRANSLATIONS = {
 DE_REGIONS = list(DE_REGION_NAMES.keys())
 # this constant is used in the Airflow DAG to save a copy of the raw data for archiving
 CSV_SAVEPATH = None
-# at least one testcount CSV wasn't formatted according to ISO 8603
-NON_ISO_TESTCOUNTS = { "2020-10-06 tests_daily_BL.CSV", "2020-11-13 tests_daily_BL.CSV" }
 
 
 def get_data_DE(run_date) -> pandas.DataFrame:
@@ -245,13 +242,21 @@ def get_testcounts_DE(run_date, take_latest:bool=True) -> pandas.DataFrame:
         raise FileNotFoundError(f'No testcounts file found in {dp_testcounts} for {date_str}')
     _log.info('Reading testcounts from %s', fp_testcounts)
 
+    # detect the datetime format
+    iso_format = True
+    with open(fp_testcounts) as tcfile:
+        tcfile.readline()
+        line2 = tcfile.readline()
+        iso_format = ";2020-" in line2
+        _log.info("Detected iso_format=%s from line %s", iso_format, line2)
+
     df_testcounts = pandas.read_csv(
         fp_testcounts,
         sep=';', decimal=',',
         encoding='unicode_escape',
         parse_dates=[1],
         # at least one testcount CSV wasn't formatted according to ISO 8603
-        dayfirst=(fp_testcounts.name in NON_ISO_TESTCOUNTS),
+        dayfirst=not iso_format,
     ).rename(columns={
         'Bundesland': 'region',
         'Datum': 'date',
