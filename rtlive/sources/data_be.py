@@ -1,6 +1,8 @@
 import logging
 import pandas
 import datetime
+import requests
+import io
 
 from typing import Dict, Tuple, Union
 
@@ -101,11 +103,13 @@ def get_data_BE(run_date: pandas.Timestamp) -> pandas.DataFrame:
             f'Today: {datetime.date.today()}, run_date: {run_date}'
         )
         
-    # Download data from Sciensano and remove last two days to deal with reporting delays
-    df_tests = (pandas.read_csv('https://epistat.sciensano.be/Data/COVID19BE_tests.csv', parse_dates=['DATE'])
-       .set_index('DATE')
-       .sort_index()
-       .reset_index()
+    # Download data from Sciensano
+    content = requests.get('https://epistat.sciensano.be/Data/COVID19BE_tests.csv', verify=False,).content
+    df_tests = pandas.read_csv(
+            io.StringIO(content.decode('utf-8')),
+            sep=',',
+            parse_dates=['DATE'],
+            usecols=['DATE', 'REGION', 'TESTS_ALL_POS', 'TESTS_ALL']
     )
     # Reformat data into Rtlive.de format at country level all
     df_tests_per_all_day = (df_tests
