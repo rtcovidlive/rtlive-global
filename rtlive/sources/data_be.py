@@ -148,11 +148,10 @@ def get_data_BE(run_date: pandas.Timestamp) -> pandas.DataFrame:
     
     # Test per province (Ignore the nan's for the moment)
     df_tests_per_province_day = (df_tests[df_tests['REGION'] != 'Brussels']
-       .groupby(['PROVINCE', 'DATE'], as_index=False)
+       .groupby(['PROVINCE', 'date'], as_index=False)
        .agg(new_cases=('TESTS_ALL_POS', 'sum'), new_tests=('TESTS_ALL', 'sum'))
-       .rename(columns={'DATE':'date', 'PROVINCE':'region'})
-       .set_index(["region", "date"])
-       .sort_index()
+       .rename(columns={'PROVINCE':'region'})
+       .set_index(['region', 'date'])
     )
     df_tests_per_province_day.index.name = ('region', 'date')
     
@@ -197,28 +196,28 @@ def forecast_BE(df: pandas.DataFrame) -> Tuple[pandas.DataFrame, dict]:
     )
     # interpolate the initial testing ramp-up to account for missing data
     df_list = []
-    for region in df.index.get_level_values(level="region").unique():
+    for region in df.index.get_level_values(level='region').unique():
         df_region = df.xs(region).copy()
 
         df_complement = pandas.DataFrame(
             index=pandas.date_range(
-                start="2020-01-01",
-                end=df_region.index.get_level_values(level="date")[0]
-                - pandas.DateOffset(1, "D"),
+                start='2020-01-01',
+                end=df_region.index.get_level_values(level='date')[0]
+                - pandas.DateOffset(1, 'D'),
                 freq="D",
             ),
             columns=df_region.columns,
         )
-        df_complement["predicted_new_tests"] = 0
+        df_complement['predicted_new_tests'] = 0
 
         df_region = df_complement.append(df_region)
-        df_region.index.name = "date"
+        df_region.index.name = 'date'
         df_region.predicted_new_tests = df_region.predicted_new_tests.interpolate(
             "linear"
         )
 
-        df_region["region"] = region
-        df_list.append(df_region.reset_index().set_index(["region", "date"]))
+        df_region['region'] = region
+        df_list.append(df_region.reset_index().set_index(['region', 'date']))
 
     return pandas.concat(df_list), results
 
