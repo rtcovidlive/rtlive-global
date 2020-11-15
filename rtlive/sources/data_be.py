@@ -110,33 +110,37 @@ def get_data_BE(run_date: pandas.Timestamp) -> pandas.DataFrame:
             sep=',',
             parse_dates=['DATE'],
             usecols=['DATE', 'REGION', 'PROVINCE', 'TESTS_ALL_POS', 'TESTS_ALL']
-    )
+    ).rename(columns={
+        'DATE': 'date'
+    })
     # Reformat data into Rtlive.de format at country level all
     df_tests_per_all_day = (df_tests
        .assign(region='all')
-       .groupby('DATE', as_index=False)
+       .groupby('date', as_index=True)
        .agg(new_cases=('TESTS_ALL_POS', 'sum'), new_tests=('TESTS_ALL', 'sum'), region=('region', 'first'))
-       .rename(columns={'DATE':'date'})
+    )
+    df_tests_per_all_day = (df_tests_per_all_day
+        .reset_index()
        .set_index(['region', "date"])
        .sort_index()
     )
     # Redistribute the nan for the column TESTS_ALL_POS for regions Flanders, Wallonia and Brussels
     df_tests_positive = (df_tests
         .fillna('Nan')
-        .groupby(['DATE'])
+        .groupby(['date'])
         .apply(redistribute, 'TESTS_ALL_POS')
         .stack()
         .reset_index()
-        .rename(columns={'DATE':'date', 'REGION':'region', 0:'new_cases'})
+        .rename(columns={'REGION':'region', 0:'new_cases'})
     )
     # Redistribute the nan for the column TESTS_ALL for regions Flanders, Wallonia and Brussels
     df_tests_all = (df_tests
         .fillna('Nan')
-        .groupby(['DATE'])
+        .groupby(['date'])
         .apply(redistribute, 'TESTS_ALL')
         .stack()
         .reset_index()
-        .rename(columns={'DATE':'date', 'REGION':'region', 0:'new_tests'})
+        .rename(columns={'REGION':'region', 0:'new_tests'})
     )
     
     # Combine the total number of tests and the number of positive tests into a basetable
@@ -144,12 +148,11 @@ def get_data_BE(run_date: pandas.Timestamp) -> pandas.DataFrame:
     
     # Test per province (Ignore the nan's for the moment)
     df_tests_per_province_day = (df_tests
-       .groupby(['PROVINCE', 'DATE'], as_index=False)
+        .rename(columns={'PROVINCE':'region'})
+       .groupby(['region', 'date'], as_index=True)
        .agg(new_cases=('TESTS_ALL_POS', 'sum'), new_tests=('TESTS_ALL', 'sum'))
-       .rename(columns={'DATE':'date', 'PROVINCE':'region'})
-       .set_index(["region", "date"])
-       .sort_index()
     )
+    df_tests_per_province_day.index.name = ("region", "date")
     
     # Combine the results at country level with region level
     data = pandas.concat([df_tests_per_all_day, df_tests_per_region_day, df_tests_per_province_day], axis=0).sort_index()
