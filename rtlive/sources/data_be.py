@@ -109,7 +109,7 @@ def get_data_BE(run_date: pandas.Timestamp) -> pandas.DataFrame:
             io.StringIO(content.decode('utf-8')),
             sep=',',
             parse_dates=['DATE'],
-            usecols=['DATE', 'REGION', 'TESTS_ALL_POS', 'TESTS_ALL']
+            usecols=['DATE', 'REGION', 'PROVINCE', 'TESTS_ALL_POS', 'TESTS_ALL']
     )
     # Reformat data into Rtlive.de format at country level all
     df_tests_per_all_day = (df_tests
