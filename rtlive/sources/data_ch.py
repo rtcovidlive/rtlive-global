@@ -17,7 +17,7 @@ def forecast_CH(df: pandas.DataFrame):
     df['predicted_new_tests'], results = preprocessing.predict_testcounts_all_regions(df, 'CH')
     # interpolate the initial testing ramp-up to account for missing data
     df_region = df.xs('all')
-    df_region.loc['2020-01-01', 'predicted_new_tests'] = 0
+    df_region.loc[pandas.Timestamp('2020-01-01'), 'predicted_new_tests'] = 0
     df_region.predicted_new_tests = df_region.predicted_new_tests.interpolate('linear')
     df_region['region'] = 'all'
     df = df_region.reset_index().set_index(['region', 'date'])    

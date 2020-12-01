@@ -15,7 +15,8 @@ def forecast_NL(df: pandas.DataFrame):
     In the future, this should be replaced with more fine graned data loading!
     """
     # only weekly total_tests are available -> interpolate the totals, then diff to get daily new_tests
-    df.at[("all", "2020-01-01"), 'total_tests'] = 0
+    df.at[("all", pandas.Timestamp("2020-01-01")), 'total_tests'] = 0
+    df.sort_index(inplace=True)
     df["new_tests"] = df.total_tests.interpolate("linear").diff()
     df["new_tests"][df.new_tests == 0] = numpy.nan
     # forecast with existing data

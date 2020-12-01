@@ -132,6 +132,9 @@ def predict_testcounts(
     if not ignore_before:
         ignore_before = testcounts.index[0]
 
+    # for safety, sort the index
+    testcounts.sort_index(inplace=True)
+
     mask_fit = testcounts.index >= ignore_before
     if keep_data:
         mask_predict = numpy.logical_and(
