@@ -20,7 +20,8 @@ def forecast_CH(df: pandas.DataFrame):
     df_region.loc[pandas.Timestamp('2020-01-01'), 'predicted_new_tests'] = 0
     df_region.predicted_new_tests = df_region.predicted_new_tests.interpolate('linear')
     df_region['region'] = 'all'
-    df = df_region.reset_index().set_index(['region', 'date'])    
+    df = df_region.reset_index().set_index(['region', 'date'])
+    df.sort_index(inplace=True)
     return df, results
 
 
