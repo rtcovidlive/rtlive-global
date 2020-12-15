@@ -231,7 +231,11 @@ def get_testcounts_DE(run_date, take_latest:bool=True) -> pandas.DataFrame:
     # find the latest tescounts file before `run_date`
     dp_testcounts = pathlib.Path(DATA_DIR)
     fp_testcounts = None
-    for fp in sorted(dp_testcounts.glob(r'*tests_daily_BL.CSV')):
+    candidate_files = {
+        *dp_testcounts.glob(r'*tests_daily_BL.csv'),
+        *dp_testcounts.glob(r'*tests_daily_BL.CSV'),
+    }
+    for fp in sorted(candidate_files):
         file_date = pandas.Timestamp(fp.name[:10])
         if not take_latest:
             if file_date < run_date:
