@@ -34,6 +34,7 @@ import typing
 
 from .. import preprocessing
 
+from . import ourworldindata
 
 _log = logging.getLogger(__file__)
 
@@ -291,6 +292,94 @@ def forecast_DE(df: pandas.DataFrame):
     df['predicted_new_tests'], results = preprocessing.predict_testcounts_all_regions(df, 'DE')
     return df, results
 
+
+def correct_forecast_by_weekly_sums(df: pandas.DataFrame) -> pandas.DataFrame:
+    region_test_percentages = estimate_test_percentages_for_regions(df)
+
+    for region in df.index.levels[0]:
+        corrected_prediction = scale_forecast_by_total_tests_reported(
+            df.loc[region, 'new_tests'],
+            df.loc['all', 'total_tests_reported'] * region_test_percentages[region],
+            df.loc[region, 'predicted_new_tests'])
+    
+        df.loc[region, 'predicted_new_tests'] = corrected_prediction.values
+    return df
+
+
+def get_testcounts_DE_total_tests_reported(run_date):
+    """ Get the total amount of tests reported to OWID.
+    
+    At the moment only the `all` region is included. At time of writing only sundays have a value that is not NaN.
+    """
+    f = ourworldindata.create_loader_function("DE")
+    data = f(run_date)
+    return data.total_tests.rename("total_tests_reported").to_frame()
+
+
+def scale_forecast_by_total_tests_reported(daily_data: pandas.Series, total_tests_reported: pandas.Series, predicted_daily_data: pandas.Series):
+    """ Scale the predicted daily test counts in a way, that the amount of tests done is equal to a different source of total test counts that
+    are reported from a different source and available before the real daily testcounts are known.
+    
+    Parameters
+    ----------
+    daily_data : pandas.Series
+        The known daily test counts. This will be used to determine at which point the predicted data starts.
+    total_tests_reported : pandas.Series
+        Series containing test count totals. Is expected to contain NaN gaps in the data. The Differences between
+        two reports will be used to make sure the total number of tests in the prediction matches this data.
+    predicted_daily_data: pandas.Series
+        The predicted data that will be scaled so the number of tests between two reports matches total_tests_reported.
+
+    Returns
+    -------
+    corrected_prediction: pandas.Series
+        The scaled prediction
+    """
+    day = pandas.Timedelta('1D')
+    
+    first_unknown_daily_data = max(daily_data[~daily_data.isna()].index) + day
+    
+    report_data = total_tests_reported[~total_tests_reported.isna()].diff()
+    
+    #find the start date of the week report that contaisn this date:
+    report_index = report_data.index.get_loc(first_unknown_daily_data,method="ffill")
+    
+    #We assume, that the report for a day includes the data for the day itself.
+    first_report_date = report_data.index[report_index] + day
+    
+    corrected_prediction = predicted_daily_data.copy()
+
+    for last_report_date, reportsum in report_data[first_report_date:].items():
+        if numpy.isnan(reportsum):
+            break
+        if first_unknown_daily_data > first_report_date:
+            # We have daily data for parts of this report. Subtract the known days from the report sum and only scale the unknown data
+            reportsum -= daily_data[first_report_date:first_unknown_daily_data - day].sum()
+            first_report_date = first_unknown_daily_data
+        corrected_prediction[first_report_date:last_report_date] *= reportsum/predicted_daily_data[first_report_date:last_report_date].sum()
+        first_report_date = last_report_date + day
+    return corrected_prediction
+
+
+def estimate_test_percentages_for_regions(df: pandas.DataFrame):
+    """ Estimate the distribution of tests across the regions in the DataFrame. Uses the last week for which daily new_test data is available for all regions.
+    
+    Parameters
+    ----------
+    df: pandas.DataFrame
+        The dataframe containing the new_test column with a [region, date] index as genereated by get_testcounts_DE. An `all` region has to be included.
+        
+    Returns
+    -------
+    region_test_percentages: pandas.DataFrame
+        Dataframe with region-index and percentage values between 0 and 1 for each region.
+    """
+    # Find the last date for each region for which we have data and get the first date of those. So the last date for which he have date for all regions.
+    last_date_with_data_for_all_regions = df.new_tests[~df.new_tests.isna()].groupby('region').tail(1).reset_index()['date'].min()
+    # Then calculate the sum of tests one week up to that date
+    testcounts_in_last_daily_data = df.new_tests.xs(slice(last_date_with_data_for_all_regions - pandas.Timedelta('6D'), last_date_with_data_for_all_regions),level='date').groupby('region').sum()
+    
+    return testcounts_in_last_daily_data/testcounts_in_last_daily_data['all']
 
 def download_rki_nowcast(run_date, target_filename) -> pathlib.Path:
     """ Downloads RKI nowcasting data unless [target_filename] already exists.
