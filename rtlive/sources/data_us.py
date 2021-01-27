@@ -139,11 +139,11 @@ def apply_corrections(data: pd.DataFrame) -> pd.DataFrame:
     data.loc[idx["WA", pd.Timestamp("2020-09-22"):pd.Timestamp("2020-09-24")], ["new_cases", "new_tests"]] = np.nan
 
     # Zero out any rows where positive tests equal or exceed total reported tests
-    # Do not act on Wyoming as they report positive==total most days
+    # Do not act on Wyoming and Hawaii as they report positive==total most days
     filtering_date = pd.Timestamp('2020-07-27')
     zero_filter = (data.positive >= data.total) & \
         (data.index.get_level_values('date') >= filtering_date) & \
-        (~data.index.get_level_values('region').isin(['WY']))
+        (~data.index.get_level_values('region').isin(['WY', 'HI']))
     data.loc[zero_filter, ["new_cases", "new_tests"]] = np.nan
     return data
 
