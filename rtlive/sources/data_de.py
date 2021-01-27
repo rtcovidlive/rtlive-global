@@ -1,6 +1,6 @@
 """ Data loader for Germany.
 
-Depends on "2020-mm-dd_tests_daily_BL.CSV" files to be present in the
+Depends on "202d-mm-dd_tests_daily_BL.CSV" files to be present in the
 /data folder at the root of the rtlive-global repository.
 
 These files are currently not publicly available, but their structure is expected
