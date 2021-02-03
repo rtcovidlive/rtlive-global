@@ -250,7 +250,7 @@ def predict_testcounts_all_regions(
     df = df.copy()
     results = {}
     # forecast testcounts in all regions
-    for region in df.index.levels[0]:
+    for region in numpy.unique(df.index.get_level_values("region")):
         new_tests_nans = df.xs(region).new_tests.isna()
         n_train = sum(~new_tests_nans)
         if sum(~new_tests_nans) > 10:
