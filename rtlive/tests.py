@@ -118,6 +118,39 @@ class TestDataDE:
             assert df_fractions.loc[reg] == exp, f"{reg}: {df_fractions.loc[reg]} != {exp}"
         pass
 
+    def test_calculate_scaling_factor(self):
+        from rtlive.sources import data_de
+
+        na = numpy.nan
+        ser_predicted = pandas.Series(
+            index=pandas.date_range("2021-04-01", "2021-04-15"),
+            data=[15,20,10] * 5
+        )
+        ser_reported = pandas.Series(
+            index=pandas.date_range("2021-04-01", "2021-04-13"),
+            data=[na,na,45]+[na,na,45+90]+[na,na,45+90+45]+[na,na,45+90+45+135]+[na]
+        )
+        result = data_de.calculate_daily_scaling_factors(
+            forecasted_daily_tests=ser_predicted,
+            sparse_reported_totals=ser_reported,
+        )
+        assert isinstance(result, pandas.DataFrame)
+        numpy.testing.assert_array_equal(
+            result.sum_predicted.to_numpy().astype(float),
+            [na, na, na, *[45.]*9, na, na, na]
+        )
+        numpy.testing.assert_array_equal(
+            result.diff_reported.to_numpy().astype(float),
+            [na, na, na, 90,90,90,45,45,45,135,135,135, na, na, na]
+        )
+        assert result.loc["2021-04-01", "scaling_factor"] == 2
+        assert result.loc["2021-04-05", "scaling_factor"] == 2
+        assert result.loc["2021-04-07", "scaling_factor"] == 1
+        assert result.loc["2021-04-12", "scaling_factor"] == 3
+        assert result.loc["2021-04-15", "scaling_factor"] == 3
+        pass
+
+
 class TestModel:
     def test_build(self):
         from rtlive.sources import data_ch
