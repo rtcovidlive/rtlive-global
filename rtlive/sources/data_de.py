@@ -282,8 +282,8 @@ def get_testcounts_DE(run_date, take_latest:bool=True) -> pandas.DataFrame:
     return df_merged
 
 
-def forecast_DE(df: pandas.DataFrame):
-    """ Applies testcount interpolation/extrapolation to french data.
+def forecast_DE(df: pandas.DataFrame) -> typing.Tuple[pandas.DataFrame, typing.Dict[str, preprocessing.ForecastingResult]]:
+    """ Applies testcount interpolation/extrapolation to German data.
 
     Currently this assumes the OWID data, which only has an "all" region.
     In the future, this should be replaced with more fine graned data loading!
@@ -361,8 +361,10 @@ def scale_forecast_by_total_tests_reported(daily_data: pandas.Series, total_test
     return corrected_prediction
 
 
-def estimate_test_percentages_for_regions(df: pandas.DataFrame):
-    """ Estimate the distribution of tests across the regions in the DataFrame. Uses the last week for which daily new_test data is available for all regions.
+def estimate_test_percentages_for_regions(df: pandas.DataFrame) -> pandas.Series:
+    """ Calculates the fraction of tests per region.
+
+    Uses the latest 7 days for which daily new_test data is available for all regions.
     
     Parameters
     ----------
@@ -371,15 +373,21 @@ def estimate_test_percentages_for_regions(df: pandas.DataFrame):
         
     Returns
     -------
-    region_test_percentages: pandas.DataFrame
-        Dataframe with region-index and percentage values between 0 and 1 for each region.
+    region_test_percentages: pandas.Series
+        Region-indexed series of fractions of all tests.
     """
-    # Find the last date for each region for which we have data and get the first date of those. So the last date for which he have date for all regions.
-    last_date_with_data_for_all_regions = df.new_tests[~df.new_tests.isna()].groupby('region').tail(1).reset_index()['date'].min()
+    rows_with_testcounts = df.new_tests[~df.new_tests.isna()]
+    last_date_with_testcounts_for_all_regions = rows_with_testcounts.groupby('region').tail(1).reset_index()['date'].min()
+
+    # select the last 7 days up to the latest testcount data point
+    last_week_of_testcounts = slice(last_date_with_testcounts_for_all_regions - pandas.Timedelta('6D'), last_date_with_testcounts_for_all_regions)
+
     # Then calculate the sum of tests one week up to that date
-    testcounts_in_last_daily_data = df.new_tests.xs(slice(last_date_with_data_for_all_regions - pandas.Timedelta('6D'), last_date_with_data_for_all_regions),level='date').groupby('region').sum()
-    
-    return testcounts_in_last_daily_data/testcounts_in_last_daily_data['all']
+    testcounts_in_last_daily_data = df.new_tests.xs(last_week_of_testcounts, level='date').groupby('region').sum()
+
+    # Finally convert absolutes to fractions
+    return testcounts_in_last_daily_data / testcounts_in_last_daily_data['all']
+
 
 def download_rki_nowcast(run_date, target_filename) -> pathlib.Path:
     """ Downloads RKI nowcasting data unless [target_filename] already exists.

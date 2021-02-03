@@ -88,6 +88,36 @@ class TestData:
             )
 
 
+class TestDataDE:
+    def test_estimate_test_percentages(self):
+        from rtlive.sources import data_de
+
+        df = pandas.DataFrame(
+            index=pandas.MultiIndex.from_product([
+                ["RegionA", "RegionB", "RegionC", "all"],
+                pandas.date_range("2020-11-01", periods=14),
+            ], names=["region", "date"]),
+            data={
+                "new_tests": numpy.nan
+            }
+        )
+        na = numpy.nan
+        df.loc["RegionA", "new_tests"] = [10, 10, 10, 10, 10, 20, 20, 20, na, na, na, na, na, na]
+        df.loc["RegionB", "new_tests"] = [10, 10, 10, 10, 30, 20, 20, 30, 30, 30, na, 12, na, na]
+        df.loc["RegionC", "new_tests"] = [40, 40, 40, 10, 30, 20, 0., 17, 40, na, 20, na, na, na]
+        df.loc["all", "new_tests"] =     [60, 60, 60, 30, 70, 60, 40, 67, 70, 30, 20, 12, na, na]
+        df.loc["all", "new_tests"] = df.loc["all", "new_tests"].values * 1.3 # plus a 30 % dark figure
+        # the last 7 days with data for all:  |=========================|
+        # total tests in that window: 100 + 130 + 157 = 387
+        total = 387 * 1.3
+        expected = dict(
+            RegionA=100/total, RegionB=130/total, RegionC=157/total
+        )
+        df_fractions = data_de.estimate_test_percentages_for_regions(df)
+        for reg, exp in expected.items():
+            assert df_fractions.loc[reg] == exp, f"{reg}: {df_fractions.loc[reg]} != {exp}"
+        pass
+
 class TestModel:
     def test_build(self):
         from rtlive.sources import data_ch
