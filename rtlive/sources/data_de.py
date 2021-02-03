@@ -279,86 +279,97 @@ def get_testcounts_DE(run_date, take_latest:bool=True) -> pandas.DataFrame:
 
     # drop non-associated AFTER calculating the sum
     df_merged.drop(index='nicht zugeordnet', inplace=True)
+
+     # Get the sparse data of total tests from OWID
+    df_owid = get_owid_summarized_totals(run_date)
+    df_merged = df_merged.assign(owid_total_tests=df_owid)
     return df_merged
 
 
 def forecast_DE(df: pandas.DataFrame) -> typing.Tuple[pandas.DataFrame, typing.Dict[str, preprocessing.ForecastingResult]]:
     """ Applies testcount interpolation/extrapolation to German data.
-
-    Currently this assumes the OWID data, which only has an "all" region.
-    In the future, this should be replaced with more fine graned data loading!
     """
     # forecast with existing data
-    df['predicted_new_tests'], results = preprocessing.predict_testcounts_all_regions(df, 'DE')
+    df['predicted_new_tests_raw'], results = preprocessing.predict_testcounts_all_regions(df, 'DE')
+
+    # scale the daily forecast by OWID summary reports (RKI weekly test report)
+    df_factors = calculate_daily_scaling_factors(
+        forecasted_daily_tests=df.loc['all', 'predicted_new_tests_raw'],
+        sparse_reported_totals=df.loc['all', 'owid_total_tests']
+    )
+    df["scaling_factor"] = numpy.nan
+    df["predicted_new_tests"] = numpy.nan
+    # the scaling factor calculated from "all"-level forecasts and total reports is used
+    # for all regions, because regional totals are currently not available from OWID
+    for region in numpy.unique(df.index.get_level_values("region")):
+        # the scaling factor column will be included in the result
+        sfs = df_factors.scaling_factor
+        df.loc[pandas.IndexSlice[region, list(sfs.index)], 'scaling_factor'] = sfs.to_numpy()
+    df['predicted_new_tests'] =  df['predicted_new_tests_raw'] * df['scaling_factor']
     return df, results
 
 
-def correct_forecast_by_weekly_sums(df: pandas.DataFrame) -> pandas.DataFrame:
-    region_test_percentages = estimate_test_percentages_for_regions(df)
-
-    for region in df.index.levels[0]:
-        corrected_prediction = scale_forecast_by_total_tests_reported(
-            df.loc[region, 'new_tests'],
-            df.loc['all', 'total_tests_reported'] * region_test_percentages[region],
-            df.loc[region, 'predicted_new_tests'])
-    
-        df.loc[region, 'predicted_new_tests'] = corrected_prediction.values
-    return df
-
-
-def get_testcounts_DE_total_tests_reported(run_date):
+def get_owid_summarized_totals(run_date):
     """ Get the total amount of tests reported to OWID.
     
-    At the moment only the `all` region is included. At time of writing only sundays have a value that is not NaN.
+    At the moment only the `all` region is included.
+    At time of writing only sundays have a value that is not NaN.
     """
     f = ourworldindata.create_loader_function("DE")
     data = f(run_date)
-    return data.total_tests.rename("total_tests_reported").to_frame()
+    return data.total_tests.rename("owid_total_tests").to_frame()
 
 
-def scale_forecast_by_total_tests_reported(daily_data: pandas.Series, total_tests_reported: pandas.Series, predicted_daily_data: pandas.Series):
-    """ Scale the predicted daily test counts in a way, that the amount of tests done is equal to a different source of total test counts that
-    are reported from a different source and available before the real daily testcounts are known.
+def calculate_daily_scaling_factors(*, forecasted_daily_tests: pandas.Series, sparse_reported_totals: pandas.Series):
+    """ Scale the daily test counts per region coming from the Prophet forecast by the test count report 
+    from OurWorldInData, which is available before the real daily testcounts are known.
     
     Parameters
     ----------
-    daily_data : pandas.Series
-        The known daily test counts. This will be used to determine at which point the predicted data starts.
-    total_tests_reported : pandas.Series
-        Series containing test count totals. Is expected to contain NaN gaps in the data. The Differences between
-        two reports will be used to make sure the total number of tests in the prediction matches this data.
-    predicted_daily_data: pandas.Series
-        The predicted data that will be scaled so the number of tests between two reports matches total_tests_reported.
+    forecasted_daily_tests: pandas.Series
+        Series from the Prophet forecast containing the confirmed daily test counts
+        sent from RKI privately as well as predicted test counts.
+        Both data are scaled by the total reported tests by OurWorldInData (OWID!
+    sparse_reported_totals : pandas.Series
+        Series from OWID containing total test counts summarized for a period of time 
+        (mostly one week) for all of Germany. It is expected to contain NaN gaps in the data.
+        The differences between this report  and the forecast data will be used to make sure
+        the total number of tests in the forecast  matches the OWID data.
 
     Returns
     -------
-    corrected_prediction: pandas.Series
-        The scaled prediction
+    correction_factor: pandas.Series
+        The scaling factor for all dates including the future.
     """
-    day = pandas.Timedelta('1D')
+    assert isinstance(forecasted_daily_tests, pandas.Series)
+    assert isinstance(sparse_reported_totals, pandas.Series)
     
-    first_unknown_daily_data = max(daily_data[~daily_data.isna()].index) + day
-    
-    report_data = total_tests_reported[~total_tests_reported.isna()].diff()
-    
-    #find the start date of the week report that contaisn this date:
-    report_index = report_data.index.get_loc(first_unknown_daily_data,method="ffill")
-    
-    #We assume, that the report for a day includes the data for the day itself.
-    first_report_date = report_data.index[report_index] + day
-    
-    corrected_prediction = predicted_daily_data.copy()
+    df_factors = pandas.DataFrame(
+        index=forecasted_daily_tests.index,
+        columns=["sum_predicted", "diff_reported", "scaling_factor"]
+    )
+    sum_dates = list(sparse_reported_totals.dropna().index)
+    for dfrom, dto in zip(sum_dates[:-1], sum_dates[1:]):
+        day = pandas.Timedelta("1D")
+        interval = slice(dfrom + day, dto)
+        # sum over the predictions in this inverval
+        sum_predicted = forecasted_daily_tests.loc[dfrom + day : dto].sum()
+        df_factors.loc[interval, ["sum_predicted"]] = sum_predicted
 
-    for last_report_date, reportsum in report_data[first_report_date:].items():
-        if numpy.isnan(reportsum):
-            break
-        if first_unknown_daily_data > first_report_date:
-            # We have daily data for parts of this report. Subtract the known days from the report sum and only scale the unknown data
-            reportsum -= daily_data[first_report_date:first_unknown_daily_data - day].sum()
-            first_report_date = first_unknown_daily_data
-        corrected_prediction[first_report_date:last_report_date] *= reportsum/predicted_daily_data[first_report_date:last_report_date].sum()
-        first_report_date = last_report_date + day
-    return corrected_prediction
+        # diff of the reports
+        prevtot = float(sparse_reported_totals.loc[dfrom])
+        nexttot = float(sparse_reported_totals.loc[dto])
+        diff_reported = nexttot - prevtot
+        df_factors.loc[interval, ["diff_reported"]] = diff_reported
+
+    df_factors["scaling_factor"] = df_factors.diff_reported / df_factors.sum_predicted
+    # extrapolate backwards at the beginning
+    first = df_factors.dropna().iloc[0]
+    df_factors.loc[:first.name, "scaling_factor"] = first.scaling_factor
+    # continue into the future with the last known scaling factor
+    last = df_factors.dropna().iloc[-1]
+    df_factors.loc[last.name:, "scaling_factor"] = last.scaling_factor
+    return df_factors
 
 
 def estimate_test_percentages_for_regions(df: pandas.DataFrame) -> pandas.Series:
