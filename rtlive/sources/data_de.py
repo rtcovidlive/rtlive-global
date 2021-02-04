@@ -320,7 +320,11 @@ def get_owid_summarized_totals(run_date):
     return data.total_tests.rename("owid_total_tests").to_frame()
 
 
-def calculate_daily_scaling_factors(*, forecasted_daily_tests: pandas.Series, sparse_reported_totals: pandas.Series):
+def calculate_daily_scaling_factors(
+    *,
+    forecasted_daily_tests: pandas.Series,
+    sparse_reported_totals: pandas.Series
+) -> pandas.DataFrame:
     """ Scale the daily test counts per region coming from the Prophet forecast by the test count report 
     from OurWorldInData, which is available before the real daily testcounts are known.
     
@@ -338,7 +342,7 @@ def calculate_daily_scaling_factors(*, forecasted_daily_tests: pandas.Series, sp
 
     Returns
     -------
-    correction_factor: pandas.Series
+    correction_factor: pandas.DataFrame
         The scaling factor for all dates including the future.
     """
     assert isinstance(forecasted_daily_tests, pandas.Series)
@@ -375,7 +379,10 @@ def calculate_daily_scaling_factors(*, forecasted_daily_tests: pandas.Series, sp
 def estimate_test_percentages_for_regions(df: pandas.DataFrame) -> pandas.Series:
     """ Calculates the fraction of tests per region.
 
-    Uses the latest 7 days for which daily new_test data is available for all regions.
+    Uses the 7 days up to the last day for which daily new_test data is available for all regions.
+
+    WARNING: If any region has a gap _before_ the last day for which all of them have data, this
+    function will fail to return the correct result.
     
     Parameters
     ----------
