@@ -102,6 +102,8 @@ class TestDataDE:
             }
         )
         na = numpy.nan
+        # TODO: The function fails on the scenario that there is a gap in any region _before_ the
+        #       last day where all of them have data.
         df.loc["RegionA", "new_tests"] = [10, 10, 10, 10, 10, 20, 20, 20, na, na, na, na, na, na]
         df.loc["RegionB", "new_tests"] = [10, 10, 10, 10, 30, 20, 20, 30, 30, 30, na, 12, na, na]
         df.loc["RegionC", "new_tests"] = [40, 40, 40, 10, 30, 20, 0., 17, 40, na, 20, na, na, na]
