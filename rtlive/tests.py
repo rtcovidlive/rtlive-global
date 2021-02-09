@@ -88,6 +88,71 @@ class TestData:
             )
 
 
+class TestDataDE:
+    def test_estimate_test_percentages(self):
+        from rtlive.sources import data_de
+
+        df = pandas.DataFrame(
+            index=pandas.MultiIndex.from_product([
+                ["RegionA", "RegionB", "RegionC", "all"],
+                pandas.date_range("2020-11-01", periods=14),
+            ], names=["region", "date"]),
+            data={
+                "new_tests": numpy.nan
+            }
+        )
+        na = numpy.nan
+        # TODO: The function fails on the scenario that there is a gap in any region _before_ the
+        #       last day where all of them have data.
+        df.loc["RegionA", "new_tests"] = [10, 10, 10, 10, 10, 20, 20, 20, na, na, na, na, na, na]
+        df.loc["RegionB", "new_tests"] = [10, 10, 10, 10, 30, 20, 20, 30, 30, 30, na, 12, na, na]
+        df.loc["RegionC", "new_tests"] = [40, 40, 40, 10, 30, 20, 0., 17, 40, na, 20, na, na, na]
+        df.loc["all", "new_tests"] =     [60, 60, 60, 30, 70, 60, 40, 67, 70, 30, 20, 12, na, na]
+        df.loc["all", "new_tests"] = df.loc["all", "new_tests"].values * 1.3 # plus a 30 % dark figure
+        # the last 7 days with data for all:  |=========================|
+        # total tests in that window: 100 + 130 + 157 = 387
+        total = 387 * 1.3
+        expected = dict(
+            RegionA=100/total, RegionB=130/total, RegionC=157/total
+        )
+        df_fractions = data_de.estimate_test_percentages_for_regions(df)
+        for reg, exp in expected.items():
+            assert df_fractions.loc[reg] == exp, f"{reg}: {df_fractions.loc[reg]} != {exp}"
+        pass
+
+    def test_calculate_scaling_factor(self):
+        from rtlive.sources import data_de
+
+        na = numpy.nan
+        ser_predicted = pandas.Series(
+            index=pandas.date_range("2021-04-01", "2021-04-15"),
+            data=[15,20,10] * 5
+        )
+        ser_reported = pandas.Series(
+            index=pandas.date_range("2021-04-01", "2021-04-13"),
+            data=[na,na,45]+[na,na,45+90]+[na,na,45+90+45]+[na,na,45+90+45+135]+[na]
+        )
+        result = data_de.calculate_daily_scaling_factors(
+            forecasted_daily_tests=ser_predicted,
+            sparse_reported_totals=ser_reported,
+        )
+        assert isinstance(result, pandas.DataFrame)
+        numpy.testing.assert_array_equal(
+            result.sum_predicted.to_numpy().astype(float),
+            [na, na, na, *[45.]*9, na, na, na]
+        )
+        numpy.testing.assert_array_equal(
+            result.diff_reported.to_numpy().astype(float),
+            [na, na, na, 90,90,90,45,45,45,135,135,135, na, na, na]
+        )
+        assert result.loc["2021-04-01", "scaling_factor"] == 2
+        assert result.loc["2021-04-05", "scaling_factor"] == 2
+        assert result.loc["2021-04-07", "scaling_factor"] == 1
+        assert result.loc["2021-04-12", "scaling_factor"] == 3
+        assert result.loc["2021-04-15", "scaling_factor"] == 3
+        pass
+
+
 class TestModel:
     def test_build(self):
         from rtlive.sources import data_ch
