@@ -472,6 +472,15 @@ def get_rki_nowcast(date_str: str, label_german:bool=False):
             data_rki = data_rki.rename(columns={
                 "Datum des Erkrankungsbeginns": "date"
             }).set_index("date")
+            if isinstance(data_rki.index[0], str):
+                data_rki = pandas.read_excel(
+                    file, sheet_name='Nowcast_R',
+                    thousands=",",
+                ).replace(".", "nan")
+                data_rki = data_rki.rename(columns={
+                    "Datum des Erkrankungsbeginns": "date"
+                }).set_index("date").astype(float)
+                data_rki.index = pandas.to_datetime(data_rki.index)
 
     result = {}
     if data_rki is not None:
