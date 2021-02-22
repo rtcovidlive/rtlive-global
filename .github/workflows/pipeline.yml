@@ -17,7 +17,6 @@ jobs:
         activate-environment: rtlive-test
         python-version: ${{ matrix.python-version }}
         channels: conda-forge
-        channel-priority: strict
     - name: Install dependencies
       shell: bash -l {0}
       run: |
