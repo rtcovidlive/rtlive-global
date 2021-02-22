@@ -12,7 +12,7 @@ dependencies:
   - mkl-service
   - pandas
   - pip
-  - pymc3
+  - pymc3 >=3.11
   - python-graphviz
   - requests
   - watermark

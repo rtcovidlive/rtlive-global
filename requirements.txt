@@ -3,5 +3,5 @@ fbprophet
 matplotlib
 mkl-service
 pandas
-pymc3 >=3.9.2
+pymc3 >=3.11
 requests
