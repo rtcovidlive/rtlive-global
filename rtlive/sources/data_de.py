@@ -466,32 +466,48 @@ def get_rki_nowcast(date_str: str, label_german:bool=False):
 
     # find & read the relevant nowcast XLSX
     data_rki = None
+    mapping = {
+        "Datum des Erkrankungsbeginns": "date",
+        "Punktschätzer der Anzahl Neuerkrankungen (ohne Glättung)": "new_cases",
+        "Untere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen (ohne Glä": "new_cases_lower",
+        "Untere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen (ohne Glättung)": "new_cases_lower",
+        "Obere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen (ohne Glät": "new_cases_upper",
+        "Obere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen (ohne Glättung)": "new_cases_upper",
+        "Punktschätzer der Anzahl Neuerkrankungen": "new_cases_smooth",
+        "Untere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen": "new_cases_smooth_lower",
+        "Obere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen": "new_cases_smooth_upper",
+        "Punktschätzer der Reproduktionszahl R": "r4",
+        "Punktschätzer der 4-Tages R-Wert": "r4",
+        "Untere Grenze des 95%-Prädiktionsintervalls der Reproduktionszahl R": "r4_lower",
+        "Untere Grenze des 95%-Prädiktionsintervalls der 4-Tages R-Wert": "r4_lower",
+        "Obere Grenze des 95%-Prädiktionsintervalls der Reproduktionszahl R": "r4_upper",
+        "Obere Grenze des 95%-Prädiktionsintervalls der 4-Tages R-Wert": "r4_upper",
+        "Punktschätzer des 7-Tage-R Wertes": "r7",
+        "Untere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R Wertes": "r7_lower",
+        "Obere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R Wertes": "r7_upper",
+    }
     for file in DATA_DIR.iterdir():
         if 'Nowcasting' in str(file) and date_str in str(file):
-            data_rki = pandas.read_excel(file, sheet_name='Nowcast_R')
-            data_rki = data_rki.rename(columns={
-                "Datum des Erkrankungsbeginns": "date"
-            }).set_index("date")
-            if isinstance(data_rki.index[0], str):
+            data_rki = pandas.read_excel(file, sheet_name='Nowcast_R').rename(columns=mapping)
+            if "," in data_rki["r4"][10]:
                 data_rki = pandas.read_excel(
                     file, sheet_name='Nowcast_R',
                     thousands=",",
-                ).replace(".", "nan")
-                data_rki = data_rki.rename(columns={
-                    "Datum des Erkrankungsbeginns": "date"
-                }).set_index("date").astype(float)
-                data_rki.index = pandas.to_datetime(data_rki.index)
+                ).rename(columns=mapping)
+            # apply type conversions and set index
+            data_rki = data_rki.replace(".", "nan").set_index("date").astype(float)
+            data_rki.index = pandas.to_datetime(data_rki.index)
 
     result = {}
     if data_rki is not None:
         params = {
-            'Rt': ('der Reproduktionszahl R', '$R_t$', 'green'),
-            'Rt_7': ('des 7-Tage-R Wertes', label_week, 'orange')
+            'Rt': ('r4', '$R_t$', 'green'),
+            'Rt_7': ('r7', label_week, 'orange')
         }
         for (identifier, label, color) in params.values():
-            r_values = data_rki[f'Punktschätzer {identifier}']
-            lower = data_rki[f'Untere Grenze des 95%-Prädiktionsintervalls {identifier}']
-            upper = data_rki[f'Obere Grenze des 95%-Prädiktionsintervalls {identifier}']
+            r_values = data_rki[identifier]
+            lower = data_rki[f'{identifier}_lower']
+            upper = data_rki[f'{identifier}_upper']
             result[f'(RKI) {label}'] = (r_values, lower, upper, color)
     return result
 
