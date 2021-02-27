@@ -495,14 +495,24 @@ def get_rki_nowcast(date_str: str, label_german:bool=False):
     for file in DATA_DIR.iterdir():
         if 'Nowcasting' in str(file) and date_str in str(file):
             data_rki = pandas.read_excel(file, sheet_name='Nowcast_R').rename(columns=mapping)
-            if "," in data_rki["r4"][10]:
+            # apply type conversions and set index
+            data_rki = data_rki.set_index("date")
+            data_rki.index = pandas.to_datetime(
+                data_rki.index,
+                dayfirst=isinstance(data_rki.index[0], str) and ".2020" in data_rki.index[0]
+            )
+            if isinstance(data_rki["r4"][10], str) and "," in data_rki["r4"][10]:
+                # thousands="." messes with the date parsing, so make a backup
+                # copy of the previously parsed dates and re-apply them later.
+                dates = data_rki.index
+                # convert german floats
                 data_rki = pandas.read_excel(
                     file, sheet_name='Nowcast_R',
-                    thousands=",",
+                    thousands=".", na_values=".",
                 ).rename(columns=mapping)
-            # apply type conversions and set index
-            data_rki = data_rki.replace(".", "nan").set_index("date").astype(float)
-            data_rki.index = pandas.to_datetime(data_rki.index)
+                data_rki.index = dates
+                # brute force everything to floats
+                data_rki = data_rki.apply(lambda col: [float(str(v).replace(",", ".")) for v in col])
 
     result = {}
     if data_rki is not None:
