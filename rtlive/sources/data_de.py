@@ -478,13 +478,19 @@ def get_rki_nowcast(date_str: str, label_german:bool=False):
         "Obere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen": "new_cases_smooth_upper",
         "Punktschätzer der Reproduktionszahl R": "r4",
         "Punktschätzer der 4-Tages R-Wert": "r4",
+        "Punktschätzer des 4-Tage-R-Wertes": "r4",
         "Untere Grenze des 95%-Prädiktionsintervalls der Reproduktionszahl R": "r4_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls der 4-Tages R-Wert": "r4_lower",
+        "Untere Grenze des 95%-Prädiktionsintervalls des 4-Tage-R-Wertes": "r4_lower",
         "Obere Grenze des 95%-Prädiktionsintervalls der Reproduktionszahl R": "r4_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls der 4-Tages R-Wert": "r4_upper",
+        "Obere Grenze des 95%-Prädiktionsintervalls des 4-Tage-R-Wertes": "r4_upper",
         "Punktschätzer des 7-Tage-R Wertes": "r7",
+        "Punktschätzer des 7-Tage-R-Wertes": "r7",
         "Untere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R Wertes": "r7_lower",
+        "Untere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R-Wertes": "r7_lower",
         "Obere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R Wertes": "r7_upper",
+        "Obere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R-Wertes": "r7_upper",
     }
     for file in DATA_DIR.iterdir():
         if 'Nowcasting' in str(file) and date_str in str(file):
