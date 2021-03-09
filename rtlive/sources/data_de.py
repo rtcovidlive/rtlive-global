@@ -494,7 +494,10 @@ def get_rki_nowcast(date_str: str, label_german:bool=False):
     }
     for file in DATA_DIR.iterdir():
         if 'Nowcasting' in str(file) and date_str in str(file):
-            data_rki = pandas.read_excel(file, sheet_name='Nowcast_R').rename(columns=mapping)
+            data_rki = pandas.read_excel(
+                file, sheet_name='Nowcast_R',
+                na_values=".",
+            ).rename(columns=mapping)
             # apply type conversions and set index
             data_rki = data_rki.set_index("date")
             data_rki.index = pandas.to_datetime(
