@@ -282,7 +282,7 @@ def get_testcounts_DE(run_date, take_latest:bool=True) -> pandas.DataFrame:
 
      # Get the sparse data of total tests from OWID
     df_owid = get_owid_summarized_totals(run_date)
-    df_merged = df_merged.assign(owid_total_tests=df_owid)
+    df_merged = df_merged.merge(df_owid, 'outer', left_index=True, right_index=True)
     return df_merged
 
 
