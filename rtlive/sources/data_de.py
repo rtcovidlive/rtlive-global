@@ -431,7 +431,7 @@ def download_rki_nowcast(run_date, target_filename) -> pathlib.Path:
     today = datetime.date.today().strftime('%Y-%m-%d')
     if str(run_date) != today: 
         raise Exception("Can only download for today.")
-    url = 'https://www.rki.de/DE/Content/InfAZ/N/Neuartiges_Coronavirus/Projekte_RKI/Nowcasting_Zahlen.xlsx;jsessionid=BA3A51DFC0A5E3FEE716B2966FDC5E54.internet071?__blob=publicationFile'
+    url = 'https://raw.githubusercontent.com/robert-koch-institut/SARS-CoV-2-Nowcasting_und_-R-Schaetzung/main/Nowcast_R_aktuell.csv'
     filepath = pathlib.Path(target_filename)
     if not filepath.exists():
         with open(filepath, 'wb') as file:
@@ -469,39 +469,49 @@ def get_rki_nowcast(date_str: str, label_german:bool=False):
     data_rki = None
     mapping = {
         "Datum des Erkrankungsbeginns": "date",
+        "Datum": "date",
+        "PS_COVID_Faelle": "new_cases",
         "Punktschätzer der Anzahl Neuerkrankungen (ohne Glättung)": "new_cases",
+        "UG_PI_COVID_Faelle": "new_cases_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen (ohne Glä": "new_cases_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen (ohne Glättung)": "new_cases_lower",
+        "OG_PI_COVID_Faelle": "new_cases_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen (ohne Glät": "new_cases_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen (ohne Glättung)": "new_cases_upper",
         "Punktschätzer der Anzahl Neuerkrankungen": "new_cases_smooth",
+        "PS_COVID_Faelle_ma4":  "new_cases_smooth",
+        "UG_PI_COVID_Faelle_ma4": "new_cases_smooth_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen": "new_cases_smooth_lower",
+        "OG_PI_COVID_Faelle_ma4": "new_cases_smooth_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls der Anzahl Neuerkrankungen": "new_cases_smooth_upper",
         "Punktschätzer der Reproduktionszahl R": "r4",
         "Punktschätzer der 4-Tages R-Wert": "r4",
         "Punktschätzer der 4-Tage R-Wert": "r4",
         "Punktschätzer des 4-Tage-R-Wertes": "r4",
+        "PS_4_Tage_R_Wert": "r4",
+        "UG_PI_4_Tage_R_Wert": "r4_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls der Reproduktionszahl R": "r4_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls der 4-Tages R-Wert": "r4_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls der 4-Tage R-Wert": "r4_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls des 4-Tage-R-Wertes": "r4_lower",
+        "OG_PI_4_Tage_R_Wert": "r4_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls der Reproduktionszahl R": "r4_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls der 4-Tages R-Wert": "r4_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls der 4-Tage R-Wert": "r4_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls des 4-Tage-R-Wertes": "r4_upper",
+        "PS_7_Tage_R_Wert": "r7",
         "Punktschätzer des 7-Tage-R Wertes": "r7",
         "Punktschätzer des 7-Tage-R-Wertes": "r7",
+        "UG_PI_7_Tage_R_Wert": "r7_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R Wertes": "r7_lower",
         "Untere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R-Wertes": "r7_lower",
+        "OG_PI_7_Tage_R_Wert": "r7_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R Wertes": "r7_upper",
         "Obere Grenze des 95%-Prädiktionsintervalls des 7-Tage-R-Wertes": "r7_upper",
     }
     for file in DATA_DIR.iterdir():
         if 'Nowcasting' in str(file) and date_str in str(file):
-            data_rki = pandas.read_excel(
-                file, sheet_name='Nowcast_R',
-                na_values=".",
-            ).rename(columns=mapping)
+            data_rki = pandas.read_csv(file, na_values=".").rename(columns=mapping)
             # apply type conversions and set index
             data_rki = data_rki.set_index("date")
             data_rki.index = pandas.to_datetime(
