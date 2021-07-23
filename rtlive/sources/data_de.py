@@ -518,7 +518,7 @@ def get_rki_nowcast(date_str: str, label_german:bool=False):
                 data_rki.index,
                 dayfirst=isinstance(data_rki.index[0], str) and ".2020" in data_rki.index[0]
             )
-            if isinstance(data_rki["r4"][10], str) and "," in data_rki["r4"][10]:
+            if isinstance(data_rki["r7"][10], str) and "," in data_rki["r7"][10]:
                 # thousands="." messes with the date parsing, so make a backup
                 # copy of the previously parsed dates and re-apply them later.
                 dates = data_rki.index
@@ -538,6 +538,8 @@ def get_rki_nowcast(date_str: str, label_german:bool=False):
             'Rt_7': ('r7', label_week, 'orange')
         }
         for (identifier, label, color) in params.values():
+            if identifier not in data_rki:
+                continue
             r_values = data_rki[identifier]
             lower = data_rki[f'{identifier}_lower']
             upper = data_rki[f'{identifier}_upper']
